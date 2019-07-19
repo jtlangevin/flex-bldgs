@@ -94,7 +94,7 @@ class ReduceLightingLoadsByPercentageAndTimePeriod < OpenStudio::Measure::ModelM
     # make an argument for reduction percentage for unoccupied spaces (if user chose the Entire Building)
     unoccupied_space_type = OpenStudio::Measure::OSArgument.makeDoubleArgument('unoccupied_space_type', true)
     unoccupied_space_type.setDisplayName('2.Lighting Power Reduction for Unoccupied Spaces (%).')
-    unoccupied_space_type.setDefaultValue(70.0)
+    unoccupied_space_type.setDefaultValue(60.0)
     args << unoccupied_space_type
 
     # make an argument for reduction percentage for specific space type (if user chose only one space type to apply this measure)
@@ -106,13 +106,13 @@ class ReduceLightingLoadsByPercentageAndTimePeriod < OpenStudio::Measure::ModelM
     # make an argument for the start time of the reduction
     starttime = OpenStudio::Measure::OSArgument.makeStringArgument('starttime', true)
     starttime.setDisplayName('Start Time for the Reduction')
-    starttime.setDefaultValue('13:00:00')
+    starttime.setDefaultValue('15:00:00')
     args << starttime
 
     # make an argument for the end time of the reduction
     endtime = OpenStudio::Measure::OSArgument.makeStringArgument('endtime', true)
     endtime.setDisplayName('End Time for the Reduction')
-    endtime.setDefaultValue('16:00:00')
+    endtime.setDefaultValue('18:00:00')
     args << endtime
 
 
@@ -301,21 +301,39 @@ class ReduceLightingLoadsByPercentageAndTimePeriod < OpenStudio::Measure::ModelM
             target_temp_si = day_value_vector[i]*lighting_power_reduction_percent
             sch_day.addValue(shift_time1, day_value_vector[i])
             sch_day.addValue(day_time_vector[i],target_temp_si)
-            count=1
+            count = 1
+            elsif day_time_vector[i]==shift_time2 && count == 0
+            target_temp_si = day_value_vector[i]*lighting_power_reduction_percent
+            sch_day.addValue(shift_time1, day_value_vector[i])
+            sch_day.addValue(day_time_vector[i],target_temp_si)
+            count = 2
+            elsif day_time_vector[i]==shift_time1 && count == 0
+            target_temp_si = day_value_vector[i]
+            sch_day.addValue(day_time_vector[i], target_temp_si)
+            count = 1
+            elsif day_time_vector[i]==shift_time2 && count == 0
+            target_temp_si = day_value_vector[i]*lighting_power_reduction_percent
+            sch_day.addValue(shift_time1, day_value_vector[i])
+            sch_day.addValue(day_time_vector[i],target_temp_si)
+            count = 2
             elsif day_time_vector[i]>shift_time2 && count == 0
             target_temp_si = day_value_vector[i]*lighting_power_reduction_percent
             sch_day.addValue(shift_time1,day_value_vector[i])
             sch_day.addValue(shift_time2,target_temp_si)
             sch_day.addValue(day_time_vector[i],day_value_vector[i])
             count = 2
-            elsif day_time_vector[i]>shift_time1 && day_time_vector[i]<=shift_time2 && count==1
+            elsif day_time_vector[i]>shift_time1 && day_time_vector[i]<shift_time2 && count==1
             target_temp_si = day_value_vector[i]*lighting_power_reduction_percent
-            sch_day.addValue(day_time_vector[i], day_value_vector[i])
+            sch_day.addValue(day_time_vector[i], target_temp_si)
+            elsif day_time_vector[i]==shift_time2 && count==1
+            target_temp_si = day_value_vector[i]*lighting_power_reduction_percent
+            sch_day.addValue(day_time_vector[i], target_temp_si)
+            count = 2
             elsif  day_time_vector[i]>shift_time2 && count == 1
             target_temp_si = day_value_vector[i]*lighting_power_reduction_percent
             sch_day.addValue(shift_time2, target_temp_si)
             sch_day.addValue(day_time_vector[i],day_value_vector[i])
-            count == 2 
+            count = 2 
             else 
             target_temp_si = day_value_vector[i]
             sch_day.addValue(day_time_vector[i], target_temp_si)

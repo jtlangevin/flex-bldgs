@@ -2,8 +2,8 @@
   <schema_version>3.0</schema_version>
   <name>reduce_electric_equipment_loads_by_percentage_and_time_period</name>
   <uid>e3a24805-f0a7-41d8-960a-43c0e66d4681</uid>
-  <version_id>ee2581f0-9621-4a86-9824-4c1d443f3aed</version_id>
-  <version_modified>20190308T232605Z</version_modified>
+  <version_id>99b68960-9e65-4fdd-81ed-2e385f1b431a</version_id>
+  <version_modified>20190611T230115Z</version_modified>
   <xml_checksum>F9A5B8F0</xml_checksum>
   <class_name>ReduceElectricEquipmentLoadsByPercentageAndTimePeriod</class_name>
   <display_name>Reduce Electric Equipment Loads by Percentage for Specific Space Type and Time Periods</display_name>
@@ -19,7 +19,7 @@
       <default_value>*Entire Building*</default_value>
       <choices>
         <choice>
-          <value>{d348142c-da07-4ae1-9db9-e50bfd266d8e}</value>
+          <value>{71d778a2-26ab-40b1-a482-2cf4a5b0992a}</value>
           <display_name>*Entire Building*</display_name>
         </choice>
       </choices>
@@ -31,7 +31,7 @@
       <type>Double</type>
       <required>true</required>
       <model_dependent>false</model_dependent>
-      <default_value>30</default_value>
+      <default_value>20</default_value>
     </argument>
     <argument>
       <name>unoccupied_space_type</name>
@@ -39,7 +39,7 @@
       <type>Double</type>
       <required>true</required>
       <model_dependent>false</model_dependent>
-      <default_value>70</default_value>
+      <default_value>50</default_value>
     </argument>
     <argument>
       <name>single_space_type</name>
@@ -47,7 +47,7 @@
       <type>Double</type>
       <required>true</required>
       <model_dependent>false</model_dependent>
-      <default_value>30</default_value>
+      <default_value>20</default_value>
     </argument>
     <argument>
       <name>starttime</name>
@@ -55,7 +55,7 @@
       <type>String</type>
       <required>true</required>
       <model_dependent>false</model_dependent>
-      <default_value>13:00:00</default_value>
+      <default_value>15:00:00</default_value>
     </argument>
     <argument>
       <name>endtime</name>
@@ -63,7 +63,7 @@
       <type>String</type>
       <required>true</required>
       <model_dependent>false</model_dependent>
-      <default_value>16:00:00</default_value>
+      <default_value>18:00:00</default_value>
     </argument>
   </arguments>
   <outputs/>
@@ -139,7 +139,7 @@
       <filename>measure.rb</filename>
       <filetype>rb</filetype>
       <usage_type>script</usage_type>
-      <checksum>9F9EE625</checksum>
+      <checksum>E2E04244</checksum>
     </file>
   </files>
 </measure>

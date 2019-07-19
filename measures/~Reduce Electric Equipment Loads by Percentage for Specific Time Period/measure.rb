@@ -88,31 +88,31 @@ class ReduceElectricEquipmentLoadsByPercentageAndTimePeriod < OpenStudio::Measur
     # make an argument for reduction percentage
     occupied_space_type = OpenStudio::Measure::OSArgument.makeDoubleArgument('occupied_space_type', true)
     occupied_space_type.setDisplayName("Please fill in the equipment loads reduction in No.1-2, if you chose the 'Entire Building'. Otherwise, please fill in the value in No.3.\n 1.Electric Equipment Loads Reduction for occupied spaces (%).")
-    occupied_space_type.setDefaultValue(30.0)
+    occupied_space_type.setDefaultValue(20.0)
     args << occupied_space_type
    
     # make an argument for reduction percentage
     unoccupied_space_type = OpenStudio::Measure::OSArgument.makeDoubleArgument('unoccupied_space_type', true)
     unoccupied_space_type.setDisplayName('2.Electric Equipment Loads Reduction for unoccupied spaces (%).')
-    unoccupied_space_type.setDefaultValue(70.0)
+    unoccupied_space_type.setDefaultValue(50.0)
     args << unoccupied_space_type
 
     # make an argument for reduction percentage
     single_space_type = OpenStudio::Measure::OSArgument.makeDoubleArgument('single_space_type', true)
     single_space_type.setDisplayName('3.Electric Equipment Loads Reduction for the selected space type (%).')
-    single_space_type.setDefaultValue(30.0)
+    single_space_type.setDefaultValue(20.0)
     args << single_space_type
 
     # make an argument for the start time of the reduction
     starttime = OpenStudio::Measure::OSArgument.makeStringArgument('starttime', true)
     starttime.setDisplayName('Start Time for the Reduction')
-    starttime.setDefaultValue('13:00:00')
+    starttime.setDefaultValue('15:00:00')
     args << starttime
 
     # make an argument for the end time of the reduction
     endtime = OpenStudio::Measure::OSArgument.makeStringArgument('endtime', true)
     endtime.setDisplayName('End Time for the Reduction')
-    endtime.setDefaultValue('16:00:00')
+    endtime.setDefaultValue('18:00:00')
     args << endtime
 
     return args
@@ -299,21 +299,29 @@ class ReduceElectricEquipmentLoadsByPercentageAndTimePeriod < OpenStudio::Measur
             target_temp_si = day_value_vector[i]*equipment_power_reduction_percent
             sch_day.addValue(shift_time1, day_value_vector[i])
             sch_day.addValue(day_time_vector[i],target_temp_si)
-            count=1
+            count = 1
+            elsif day_time_vector[i]==shift_time1 && count == 0
+            target_temp_si = day_value_vector[i]
+            sch_day.addValue(day_time_vector[i], target_temp_si)
+            count = 1
             elsif day_time_vector[i]>shift_time2 && count == 0
             target_temp_si = day_value_vector[i]*equipment_power_reduction_percent
             sch_day.addValue(shift_time1,day_value_vector[i])
             sch_day.addValue(shift_time2,target_temp_si)
             sch_day.addValue(day_time_vector[i],day_value_vector[i])
             count = 2
-            elsif day_time_vector[i]>shift_time1 && day_time_vector[i]<=shift_time2 && count==1
+            elsif day_time_vector[i]>shift_time1 && day_time_vector[i]<shift_time2 && count==1
             target_temp_si = day_value_vector[i]*equipment_power_reduction_percent
-            sch_day.addValue(day_time_vector[i], day_value_vector[i])
+            sch_day.addValue(day_time_vector[i], target_temp_si)
+           elsif day_time_vector[i]==shift_time2 && count==1
+            target_temp_si = day_value_vector[i]*equipment_power_reduction_percent
+            sch_day.addValue(day_time_vector[i], target_temp_si)
+            count = 2
             elsif  day_time_vector[i]>shift_time2 && count == 1
             target_temp_si = day_value_vector[i]*equipment_power_reduction_percent
             sch_day.addValue(shift_time2, target_temp_si)
             sch_day.addValue(day_time_vector[i],day_value_vector[i])
-            count == 2 
+            count = 2 
             else 
             target_temp_si = day_value_vector[i]
             sch_day.addValue(day_time_vector[i], target_temp_si)
