@@ -2,9 +2,13 @@
 import pymc3 as pm
 import theano as tt
 from theano.sandbox.rng_mrg import MRG_RandomStreams
+from theano import shared
 import matplotlib.pyplot as plt
 import numpy as np
-from os import getcwd
+from os import getcwd, path
+from os.path import join
+from argparse import ArgumentParser
+import pickle
 tt.config.compute_test_value = "ignore"
 
 
@@ -154,120 +158,166 @@ class ModelIO(object):
 
 def main(base_dir):
     """Implement Bayesian network and plot resultant parameter estimates."""
+
+    # Set file path to stored model information
+    model_fpath = ("stored", "model.pkl")
+
     # Set numpy and theano RNG seeds for consistency
     np.random.seed(123)
     th_rng = MRG_RandomStreams()
     th_rng.seed(123)
 
     # Set number of observations to use for parameter updating (for now,
-    # assume model parameters are updated daily given 15 minute interval data
-    # from all 24 hours)
+    # assume model parameters are updated daily given 15 minute interval
+    # data from all 24 hours)
     n_samples = 24 * 4
     # Set number of control choices
     n_choices = 3
 
-    # Initialize test data
-    io = ModelIO(th_rng, n_samples, n_choices)
+    # Initialize original test data
+    io_orig = ModelIO(th_rng, n_samples, n_choices)
+    # Convert test data object to shared theano variable
+    io_shared = shared(io_orig)
 
-    # Estimate Bayesian network model
-    with pm.Model() as flex_bdn:
+    # Proceed with model inference only if user flags doing so
+    if opts.mod_est is True:
 
-        # *** Temperature sub-model ***
+        # Estimate Bayesian network model
+        with pm.Model() as flex_bdn:
 
-        # Set parameter priors (betas, error)
-        ta_params = pm.Normal('ta_params', 0, 20, shape=(io.X_temp.shape[1]))
-        ta_sd = pm.Uniform('ta_sd', 0, 20)
-        # Likelihood of temperature estimator
-        ta_est = pm.math.dot(io.X_temp, ta_params)
-        # Likelihood of temperature
-        ta = pm.Normal('ta', mu=ta_est, sd=ta_sd, observed=io.Y_temp)
+            # Unpack shared theano variable
+            io = io_shared.get_value()
 
-        # *** RH sub-model ***
+            # *** Temperature sub-model ***
 
-        # Set parameter priors (betas, error)
-        rh_params = pm.Normal('rh_params', 0, 20, shape=(io.X_hum.shape[1]))
-        rh_sd = pm.Uniform('rh_sd', 0, 20)
-        # Likelihood of humidity estimator
-        rh_est = pm.math.dot(io.X_hum, rh_params)
-        # Likelihood of humidity
-        rh = pm.Normal('rh', mu=rh_est, sd=rh_sd, observed=io.Y_hum)
+            # Set parameter priors (betas, error)
+            ta_params = pm.Normal(
+                'ta_params', 0, 20, shape=(io.X_temp.shape[1]))
+            ta_sd = pm.Uniform('ta_sd', 0, 20)
+            # Likelihood of temperature estimator
+            ta_est = pm.math.dot(io.X_temp, ta_params)
+            # Likelihood of temperature
+            ta = pm.Normal('ta', mu=ta_est, sd=ta_sd, observed=io.Y_temp)
 
-        # *** CO2 sub-model ***
+            # *** RH sub-model ***
 
-        # Set parameter priors (betas, error)
-        co2_params = pm.Normal('co2_params', 0, 20, shape=(io.X_co2.shape[1]))
-        co2_sd = pm.Uniform('co2_sd', 0, 20)
-        # Likelihood of CO2 estimator
-        co2_est = pm.math.dot(io.X_co2, co2_params)
-        # Likelihood of CO2
-        co2 = pm.Normal('co2', mu=co2_est, sd=co2_sd, observed=io.Y_co2)
+            # Set parameter priors (betas, error)
+            rh_params = pm.Normal(
+                'rh_params', 0, 20, shape=(io.X_hum.shape[1]))
+            rh_sd = pm.Uniform('rh_sd', 0, 20)
+            # Likelihood of humidity estimator
+            rh_est = pm.math.dot(io.X_hum, rh_params)
+            # Likelihood of humidity
+            rh = pm.Normal('rh', mu=rh_est, sd=rh_sd, observed=io.Y_hum)
 
-        # *** Lighting sub-model ***
+            # *** CO2 sub-model ***
 
-        # Set parameter priors (betas, error)
-        lt_params = pm.Normal('lt_params', 0, 20, shape=(io.X_lt.shape[1]))
-        lt_sd = pm.Uniform('lt_sd', 0, 20)
-        # Likelihood of lighting estimator
-        lt_est = pm.math.dot(io.X_lt, lt_params)
-        # Likelihood of lighting
-        lt = pm.Normal('lt', mu=lt_est, sd=lt_sd, observed=io.Y_lt)
+            # Set parameter priors (betas, error)
+            co2_params = pm.Normal(
+                'co2_params', 0, 20, shape=(io.X_co2.shape[1]))
+            co2_sd = pm.Uniform('co2_sd', 0, 20)
+            # Likelihood of CO2 estimator
+            co2_est = pm.math.dot(io.X_co2, co2_params)
+            # Likelihood of CO2
+            co2 = pm.Normal('co2', mu=co2_est, sd=co2_sd, observed=io.Y_co2)
 
-        # *** Demand sub-model ***
+            # *** Lighting sub-model ***
 
-        # Set parameter priors (switch points, betas, error)
-        # Switch points
-        dmd_sp1 = pm.DiscreteUniform(
-            'dmd_sp1', io.temp_out.min(), io.temp_out.max())
-        dmd_sp2 = pm.DiscreteUniform('dmd_sp2', dmd_sp1, io.temp_out.max())
-        # Betas
-        dmd_params_c = pm.Normal('dmd_params_c', 0, 20, shape=(
-            3, io.X_dmd_c.shape[1]))
-        dmd_params_nc = pm.Normal('dmd_params_nc', 0, 20, shape=(
-            io.X_dmd_nc.shape[1]))
-        # Error
-        dmd_sd = pm.Uniform('dmd_sd', 0, 20)
-        # Likelihood of demand estimator
-        dmd_est_c = pm.math.switch(
-            dmd_sp1 >= io.temp_out,
-            pm.math.dot(io.X_dmd_c, dmd_params_c[0]),
-            pm.math.dot(io.X_dmd_c, dmd_params_c[1]))
-        dmd_est = pm.math.switch(
-            dmd_sp2 >= io.temp_out, dmd_est_c,
-            pm.math.dot(io.X_dmd_c, dmd_params_c[2])) + pm.math.dot(
-                io.X_dmd_nc, dmd_params_nc)
-        # Likelihood of demand
-        dmd = pm.Normal('dmd', mu=dmd_est, sd=dmd_sd, observed=io.Y_dmd)
+            # Set parameter priors (betas, error)
+            lt_params = pm.Normal('lt_params', 0, 20, shape=(io.X_lt.shape[1]))
+            lt_sd = pm.Uniform('lt_sd', 0, 20)
+            # Likelihood of lighting estimator
+            lt_est = pm.math.dot(io.X_lt, lt_params)
+            # Likelihood of lighting
+            lt = pm.Normal('lt', mu=lt_est, sd=lt_sd, observed=io.Y_lt)
 
-        # *** Choice sub-model ***
+            # *** Demand sub-model ***
 
-        # X variables are the outputs of the above sub-models
-        x_choice_bn = tt.tensor.stack([
-            ta, rh, co2, lt, io.plug_delta, dmd,
-            io.intercept]).T
-        # Set parameter priors (betas)
-        choice_params = pm.Normal(
-            'choice_params', mu=0, sd=10, shape=(
-                x_choice_bn.shape.eval()[1], n_choices))
-        # Softmax transformation of linear estimator into multinomial choice
-        # probabilities
-        logit_bn = pm.math.dot(x_choice_bn, choice_params)
-        choice_probs_bn = tt.tensor.nnet.softmax(logit_bn)
-        # Set choice probabilities as deterministic PyMC3 variable type
-        p = pm.Deterministic('p', choice_probs_bn)
-        # Likelihood of choice
-        choice = pm.Categorical('choice', p=p, observed=io.Y_choice)
+            # Set parameter priors (switch points, betas, error)
+            # Switch points
+            dmd_sp1 = pm.DiscreteUniform(
+                'dmd_sp1', io.temp_out.min(), io.temp_out.max())
+            dmd_sp2 = pm.DiscreteUniform('dmd_sp2', dmd_sp1, io.temp_out.max())
+            # Betas
+            dmd_params_c = pm.Normal('dmd_params_c', 0, 20, shape=(
+                3, io.X_dmd_c.shape[1]))
+            dmd_params_nc = pm.Normal('dmd_params_nc', 0, 20, shape=(
+                io.X_dmd_nc.shape[1]))
+            # Error
+            dmd_sd = pm.HalfNormal('dmd_sd', 20)
+            # Likelihood of demand estimator
+            dmd_est_c = pm.math.switch(
+                dmd_sp1 >= io.temp_out,
+                pm.math.dot(io.X_dmd_c, dmd_params_c[0]),
+                pm.math.dot(io.X_dmd_c, dmd_params_c[1]))
+            dmd_est = pm.math.switch(
+                dmd_sp2 >= io.temp_out, dmd_est_c,
+                pm.math.dot(io.X_dmd_c, dmd_params_c[2])) + pm.math.dot(
+                    io.X_dmd_nc, dmd_params_nc)
+            # Likelihood of demand
+            dmd = pm.Normal('dmd', mu=dmd_est, sd=dmd_sd, observed=io.Y_dmd)
 
-        # Draw posterior samples
-        trace = pm.sample()
+            # *** Choice sub-model ***
 
-    # # Sample from the posterior predictive distribution
-    # ppc = pm.sample_posterior_predictive(trace, samples=1, model=flex_bdn)
-    # print(ppc)
+            # X variables are the outputs of the above sub-models
+            x_choice_bn = tt.tensor.stack([
+                ta, rh, co2, lt, io.plug_delta, dmd,
+                io.intercept]).T
+            # Set parameter priors (betas)
+            choice_params = pm.Normal(
+                'choice_params', mu=0, sd=10, shape=(
+                    x_choice_bn.shape.eval()[1], n_choices))
+            # Softmax transformation of linear estimator into multinomial choice
+            # probabilities
+            logit_bn = pm.math.dot(x_choice_bn, choice_params)
+            choice_probs_bn = tt.tensor.nnet.softmax(logit_bn)
+            # Set choice probabilities as deterministic PyMC3 variable type
+            p = pm.Deterministic('p', choice_probs_bn)
+            # Likelihood of choice
+            choice = pm.Categorical('choice', p=p, observed=io.Y_choice)
+
+            # Draw posterior samples
+            trace = pm.sample()
+
+        # Store model, trace, and predictor variables
+        with open(path.join(base_dir, *model_fpath), 'wb') as store:
+            pickle.dump({
+                'model': flex_bdn, 'trace': trace, 'X_shared': io_shared},
+                store)
+    # Reload model, trace, and predictor variables
+    with open(path.join(base_dir, *model_fpath), 'rb') as store:
+        data = pickle.load(store)
+    # Reload model
+    model = data['model']
+    # Reload parameter traces
+    trace = data['trace']
     # Plot parameter traces for diagnostic purposes
-    pm.traceplot(trace)
-    plt.show()
+    # pm.traceplot(trace)
+    # plt.show()
+    # Reload shared X variable data
+    X_shared = data['X_shared']
+    # Reset shared X variable data values to those used for predictions
+    # NOTE: currently reset to the same values used for model training,
+    # but eventually a fresh dataset of test data that is separate from the
+    # training data will be used
+    X_shared.set_value(io_orig)
+
+    # Sample predictions using the stored model information
+    with model:
+        post_pred = pm.sample_posterior_predictive(trace, samples=1)
+        # Print model choice estimates for certain number of samples
+        print(post_pred["choice"])
 
 
 if __name__ == '__main__':
+    # Handle optional user-specified execution arguments
+    parser = ArgumentParser()
+    # Optional flag to re-estimate the stored model with new data
+    # NOTE: currently parameter priors are regenerated to be vague, but
+    # eventually the priors will be drawn from the previous posterior estimates
+    parser.add_argument("--mod_est", action="store_true",
+                        help="Restrict model estimation step")
+    # Object to store all user-specified execution arguments
+    opts = parser.parse_args()
     base_dir = getcwd()
     main(base_dir)
