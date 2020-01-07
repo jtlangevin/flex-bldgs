@@ -3,6 +3,7 @@ import pymc3 as pm
 import theano as tt
 from theano.sandbox.rng_mrg import MRG_RandomStreams
 import numpy as np
+from scipy.special import softmax
 from os import getcwd, path
 from argparse import ArgumentParser
 import pickle
@@ -234,31 +235,31 @@ class ModelIOPredict(object):
         # Natural illuminance
         lt_out = data['lt_nat']
         # Plug load power fraction reduction
-        plug_delta = data['mels_delt_pct']
+        self.plug_delta = data['mels_delt_pct']
         # Plug load power fraction reduction
         plug_delta_lag = data['mels_delt_pct_lag']
         # Convert to theano tensor for use in pm.Model()
-        self.plug_delta = tt.tensor._shared(plug_delta)
+        # self.plug_delta = tt.tensor._shared(plug_delta)
         # Set a vector of ones for intercept estimation
         intercept = np.ones(len(oaf_delta))
         # Convert to theano tensor
         self.intercept = tt.tensor._shared(intercept)
         # Set a price vector
-        price_delt = data['delt_price_kwh']
+        self.price_delt = data['delt_price_kwh']
         # Convert to theano tensor
-        self.price_delt = tt.tensor._shared(price_delt)
+        # self.price_delt = tt.tensor._shared(price_delt)
 
         # Temperature model X variables
         self.X_temp = np.column_stack([
             occupancy.T, self.temp_out.T, rh_out, tmp_delta.T, lt_delta.T,
-            plug_delta.T, tmp_delta_lag.T, lt_delta_lag.T,
+            self.plug_delta.T, tmp_delta_lag.T, lt_delta_lag.T,
             plug_delta_lag.T, pcool_start.T, pcool_end.T, dr_start.T,
             dr_end.T, intercept.T])
 
         # Humidity model X variables
         self.X_hum = np.column_stack([
             occupancy.T, self.temp_out.T, rh_out, tmp_delta.T, lt_delta.T,
-            plug_delta.T, tmp_delta_lag.T, lt_delta_lag.T,
+            self.plug_delta.T, tmp_delta_lag.T, lt_delta_lag.T,
             plug_delta_lag.T, pcool_start.T, pcool_end.T, dr_start.T,
             dr_end.T, intercept.T])
 
@@ -274,7 +275,7 @@ class ModelIOPredict(object):
         # Facility energy use model X variables (no change point behavior)
         self.X_dmd_nc = np.column_stack([
             occupancy.T, self.temp_out.T, rh_out.T, tmp_delta.T, lt_delta.T,
-            plug_delta.T, tmp_delta_lag.T, lt_delta_lag.T,
+            self.plug_delta.T, tmp_delta_lag.T, lt_delta_lag.T,
             plug_delta_lag.T, pcool_start.T, pcool_end.T, dr_start.T,
             dr_end.T, intercept.T])
 
@@ -452,20 +453,20 @@ def main(base_dir):
     # Set number of control choices
     n_choices = 16
     # Set number of samples to draw. for predictions
-    n_samples = 100
+    n_samples = 1000
     # Set number of scenarios to test
     n_scenarios = 10
     # Set square footage to assume
     sf = int(input("Enter the total square footage of your building: "))
-    # Sample noise to use in the choice model
-    rand_elem = th_rng.normal(n_choices, avg=0, std=1)
+
     # Set the constant set of betas across alternatives to use in the choice
-    # model
-    betas_choice = tt.tensor._shared(
-        np.array([0.05, -20, 0, -50, -50, -100, 10]))
+    betas_choice = np.array([0.05, -20, 0, -50, -50, -100, 10])
 
     # Loop through the set of scenarios considered for FY19 EOY deliverable
     for scn in range(n_scenarios):
+        # Sample noise to use in the choice model
+        rand_elem = np.random.normal(
+            loc=0, scale=1, size=(n_samples, n_choices))
         print(("Running input scenario " + str(scn+1)) + "...")
         # Reset x predictor variables according to the scenario
         iop = ModelIOPredict(handyfiles, scn=scn)
@@ -586,49 +587,35 @@ def main(base_dir):
             ppc_dmd = pm.sample_posterior_predictive(
                 trace_dmd, samples=n_samples)
 
-        # Initialize choice logits
-        choice_logits = [np.zeros(n_choices) for x in range(n_samples)]
         print("Setting choice probabilities based on sampled input values...",
               end="", flush=True)
-        # Loop through each sample of input variables one-by-one
-        for s in range(n_samples):
-            # Calculate the total cost delta under the currently sampled
-            # change in demand, paired with square footage and price per
-            # kWh avoided
-            cost_delt = ppc_dmd["dmd"][s] * sf * iop.price_delt.eval()
-            # Assemble the input variables to the choice models using
-            # values for those variables in the current sample
-            x_choice = tt.tensor.stack([
-                cost_delt, abs(ppc_ta["ta"][s]), ppc_rh["rh"][s],
-                ppc_co2["co2"][s], ppc_lt["lt"][s], iop.plug_delta,
-                iop.intercept])
-            # Loop through all possible choices and calculate logits for
-            # each choice given the betas and variable inputs
-            for ind in range(n_choices):
-                choice_logits[s][ind] = pm.math.dot(
-                    x_choice.eval().T[ind], betas_choice.eval()).eval() + \
-                    rand_elem.eval()[ind]
-        # Use softmax transformation to yield choice probabilities across all
-        # samples
-        choice_probs = tt.tensor.nnet.softmax(choice_logits)
+
+        # Multiply change in demand/sf by sf and price delta to get to total
+        # cost difference for the operator
+        cost_delt = ppc_dmd["dmd"] * sf * iop.price_delt
+        # Extend plug load delta values for each choice across all samples
+        plug_delt = np.tile(iop.plug_delta, (n_samples, 1))
+        # Extend intercept input for each choice across all samples
+        intercept = np.tile(np.ones(n_choices), (n_samples, 1))
+        # Stack all model inputs into a single array
+        x_choice = np.stack([
+            cost_delt, abs(ppc_ta["ta"]), ppc_rh["rh"],
+            ppc_co2["co2"], ppc_lt["lt"], plug_delt, intercept])
+        # Multiply model inputs by betas to yield choice logits
+        choice_logits = np.sum([x_choice[i] * betas_choice[i] for
+                               i in range(len(x_choice))], axis=0) + rand_elem
+        # Softmax transformation of logits into choice probabilities
+        choice_probs = softmax(choice_logits, axis=1)
         print("Complete.")
-        # Control choice model Y variable - theano yields a vector where the
-        # elements are themselves vectors of length three, with ones in
-        # the chosen index elements (e.g., [[0, 1, 0], [0, 0, 1], ...])
-        y_choice = th_rng.multinomial(n=1, pvals=choice_probs).eval()
-        # Reformat choice tensor such that it is a vector with the choice
-        # index (0, 1, 2) in each of the elements (e.g., [1, 2, ...])
-        Y_choice = np.zeros(len(y_choice))
-        for ind, r in enumerate(y_choice):
-            Y_choice[ind] = np.nonzero(r)[0][0]
-        # Pull the mode (most frequently sampled choice) from the predicted
-        # choice sample
-        mode = stats.mode(Y_choice)
-        # Print the most frequently sampled choice along with its frequency
-        # in the sampled
-        print(("Scenario " + str(scn+1) + " choice recommendation: " +
-               iop.names[int(mode.mode[0])] + ", " +
-              (str((mode.count[0] / n_samples)*100) + "%")))
+        # Simulate choices across all samples given inputs and betas
+        choice_out = [
+            np.random.choice(n_choices, 1000, p=x) for x in choice_probs]
+        # Report frequency with which each choice occurs for the scenario
+        unique, counts = np.unique(choice_out, return_counts=True)
+        print(
+            "Choice number and probability of selecting "
+            "(choices not listed are zero): " + str(dict(zip(
+                (unique + 1), (counts / np.sum(counts))))))
 
 
 if __name__ == '__main__':
