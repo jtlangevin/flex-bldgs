@@ -1,8 +1,0 @@
-/model_stored/tmp.pkl filter=lfs diff=lfs merge=lfs -text
-/model_stored/dmd.pkl filter=lfs diff=lfs merge=lfs -text
-/model_stored/rh.pkl filter=lfs diff=lfs merge=lfs -text
-/model_stored/co2.pkl filter=lfs diff=lfs merge=lfs -text
-/model_stored/lt.pkl filter=lfs diff=lfs merge=lfs -text
-/data/synth_new.csv filter=lfs diff=lfs merge=lfs -text
-/data/synth_exist.csv filter=lfs diff=lfs merge=lfs -text
-/data/test.csv filter=lfs diff=lfs merge=lfs -text
