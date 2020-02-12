@@ -17,6 +17,8 @@ class UsefulFilesVars(object):
     """Summarize key model input, estimation, and output information.
 
     Attributes:
+        coefs (tuple): Path to CSV file with regression coefficients
+        coef_names_dtypes (list): Variable names/formats for coefficients CSV
         mod_dict (dict): Dict with information on input data, variables, and
             output plotting file names for each model type.
     """
@@ -48,6 +50,8 @@ class UsefulFilesVars(object):
             stored_dmd = ("model_stored", "dmd_mo_n.pkl")
             stored_co2 = ("model_stored", "co2_mo.pkl")
             stored_pc_tmp = ("model_stored", "pc_mo_n.pkl")
+            # Regression coefficients
+            self.coefs = ("data", "coefs_mo_n.csv")
         # Medium office, <2004 vintage
         elif bldg_type_vint == "mediumofficeold":
             if mod_init is True or mod_assess is True:
@@ -63,6 +67,8 @@ class UsefulFilesVars(object):
             stored_dmd = ("model_stored", "dmd_mo_o.pkl")
             stored_co2 = ("model_stored", "co2_mo.pkl")
             stored_pc_tmp = ("model_stored", "pc_mo_o.pkl")
+            # Regression coefficients
+            self.coefs = ("data", "coefs_mo_o.csv")
         # Retail, >=2004 vintage
         elif bldg_type_vint == "retailnew":
             if mod_init is True or mod_assess is True:
@@ -78,6 +84,8 @@ class UsefulFilesVars(object):
             stored_dmd = ("model_stored", "dmd_ret_n.pkl")
             stored_co2 = ("model_stored", "co2_ret.pkl")
             stored_pc_tmp = ("model_stored", "pc_ret_n.pkl")
+            # Regression coefficients
+            self.coefs = ("data", "coefs_ret_n.csv")
         # Medium office, <2004 vintage
         elif bldg_type_vint == "retailold":
             if mod_init is True or mod_assess is True:
@@ -93,6 +101,8 @@ class UsefulFilesVars(object):
             stored_dmd = ("model_stored", "dmd_ret_o.pkl")
             stored_co2 = ("model_stored", "co2_ret.pkl")
             stored_pc_tmp = ("model_stored", "pc_ret_o.pkl")
+            # Regression coefficients
+            self.coefs = ("data", "coefs_ret_o.csv")
         # Lighting models are not broken out by building type/vintage
         if mod_init is True or mod_assess is True:
             lgt_dat = ("data", "Illuminance.csv")
@@ -125,8 +135,8 @@ class UsefulFilesVars(object):
                 ['<i4'] * 4 + ['<U25'] + ['<f8'] * 16)]
             lt_names_dtypes = [
                 ('id', 'lt_in_delt_pct', 'lt_in_delt', 'hour', 'lt_nat',
-                 'cloud_out', 'hrs_since_dr_st', 'lt_pwr_delt',
-                 'lt_pwr_delt_pct_lag'), (['<i4'] * 1 + ['<f8'] * 8)]
+                 'cloud_out', 'hrs_since_dr_st', 'lt_pwr_delt', 'base_lt_frac',
+                 'lt_pwr_delt_pct'), (['<i4'] * 1 + ['<f8'] * 9)]
             pc_tmp_names_dtypes = [
                 ('id', 'vintage', 'day_typ', 'hour', 'climate',
                  'dmd_delt_sf', 't_in_delt', 'rh_in_delt', 't_out', 'rh_out',
@@ -136,11 +146,15 @@ class UsefulFilesVars(object):
                  'tsp_delt_lag', 'lt_pwr_delt_pct_lag', 'mels_delt_pct_lag',
                  'ven_delt_pct_lag'),
                 (['<i4'] * 4 + ['<U25'] + ['<f8'] * 19)]
+            self.coef_names_dtypes = [
+                ('demand', 'temperature', 'co2', 'lighting',
+                 'temperature_precool'), (['<f8'] * 5)]
         # Set data input file column names and data types for model
         # re-estimation; these will be the same across models
         elif mod_est is True:
             tmp_dmd_names_dtypes, co2_names_dtypes, lt_names_dtypes, \
-                pc_tmp_names_dtypes = (None for n in range(3))
+                pc_tmp_names_dtypes, self.coef_names_dtypes = (
+                    None for n in range(3))
         # Set data input file column names and data types for model
         # prediction; these will be the same across models
         else:
@@ -155,6 +169,7 @@ class UsefulFilesVars(object):
                     'mels_delt_pct_lag', 'pc_tmp_inc', 'pc_length',
                     'lt_pwr_delt'),
                     (['<U25'] + ['<f8'] * 21)] for n in range(3))
+            self.coef_names_dtypes = None
 
         # For each model type, store information on input/output data file
         # names, input/output data file formats, model variables, and
@@ -192,14 +207,14 @@ class UsefulFilesVars(object):
                     "traceplots_lt.png", "postplots_lt.png",
                     "ppcheck_lt.png", "scatter_lt.png"]
             },
-            "temperature (pre-cool)": {
+            "temperature_precool": {
                 "io_data": [pc_tmp_dat, stored_pc_tmp],
                 "io_data_names": pc_tmp_names_dtypes,
                 "var_names": ['ta_pc_params', 'ta_pc_sd', 'ta_pc'],
                 "fig_names": [
                     "traceplots_tmp_pc.png", "postplots_tmp_pc.png",
                     "ppcheck_tmp_pc.png", "scatter_tmp_pc.png"]
-            },
+            }
 
         }
 
@@ -209,15 +224,18 @@ class ModelDataLoad(object):
 
     Attributes:
         dmd_tmp (numpy.ndarray): Input/output data for demand/temp. models.
+        pc_tmp (numpy.ndarray): Input/output data for pre-cooling model.
         co2 (numpy.ndarray): Input/output data for CO2 model.
         lt (numpy.ndarray): Input/output data for lighting model.
+        coefs (numpy.ndarray): Ref. parameter coefficient values across models.
     """
 
     def __init__(self, handyfilesvars, mod_init, mod_assess, scn):
         """Initialize class attributes."""
 
         # Initialize plug load delta and price delta as None
-        self.plug_delt, self.price_delt = (None for n in range(2))
+        self.coefs, self.plug_delt, self.price_delt = (
+            None for n in range(3))
         # Data read-in for model initialization is specific to each type
         # of model (though demand/temperature share the same input data);
         if mod_init is True or mod_assess is True:
@@ -249,16 +267,21 @@ class ModelDataLoad(object):
             self.pc_tmp = np.genfromtxt(
                 path.join(base_dir,
                           *handyfilesvars.mod_dict[
-                            "temperature (pre-cool)"]["io_data"][0]),
+                            "temperature_precool"]["io_data"][0]),
                 skip_header=True, delimiter=',',
                 names=handyfilesvars.mod_dict[
-                    "temperature (pre-cool)"]["io_data_names"][0],
+                    "temperature_precool"]["io_data_names"][0],
                 dtype=handyfilesvars.mod_dict[
-                    "temperature (pre-cool)"]["io_data_names"][1])
+                    "temperature_precool"]["io_data_names"][1])
             # Stop routine if files were not properly read in
             if any([len(x) == 0 for x in [
                     self.dmd_tmp, self.co2, self.lt, self.pc_tmp]]):
                 raise ValueError("Failure to read input file(s)")
+            self.coefs = np.genfromtxt(
+                path.join(base_dir, *handyfilesvars.coefs),
+                skip_header=True, delimiter=',',
+                names=handyfilesvars.coef_names_dtypes[0],
+                dtype=handyfilesvars.coef_names_dtypes[1])
         # Data read-in for model re-estimation/prediction is common across
         # model types
         else:
@@ -357,21 +380,28 @@ class ModelIO(object):
             intercept = np.ones(len(occ_frac))
             # Initialize interactive terms
             # Temp. set point and lighting difference
-            tmp_lt_interact = tmp_delta * lt_delta
+            tmp_lt = tmp_delta * lt_delta
             # Temp. set point and outdoor air fraction difference
-            tmp_oaf_interact = tmp_delta * oaf_delta
+            tmp_oaf = tmp_delta * oaf_delta
             # Pre-cool duration, and magnitude
             pcool_interact = pcool_duration * pcool_magnitude
             # Temp. set point difference, outdoor temperature, and DR st. time
-            tmp_out_dr_start_interact = tmp_delta * temp_out * dr_start
+            tmp_out_tmp_delt_dr_start = tmp_delta * temp_out * dr_start
+            # Temp. set point diff, outdoor temperature
+            tmp_out_tmp_delt = tmp_delta * temp_out
+            # Outdoor temperature, DR st. time
+            tmp_out_dr_start = temp_out * dr_start
+            # Temp set point diff, since DR started
+            tmp_delt_dr_start = tmp_delta * dr_start
 
             # Set model input (X) variables
             self.X_all = np.stack([
-                temp_out, rh_out, occ_frac, tmp_delta, lt_delta, oaf_delta,
-                plug_delta, dr_start, dr_end, pcool_duration, pcool_magnitude,
-                tmp_delta_lag, lt_delta_lag, oaf_delta_lag, plug_delta_lag,
-                tmp_lt_interact, tmp_oaf_interact, pcool_interact,
-                tmp_out_dr_start_interact, intercept], axis=1)
+                intercept, temp_out, rh_out, occ_frac, tmp_delta, lt_delta,
+                oaf_delta, plug_delta, dr_start, dr_end, tmp_delta_lag,
+                lt_delta_lag, plug_delta_lag, oaf_delta_lag, pcool_magnitude,
+                pcool_duration, tmp_lt, tmp_oaf,
+                tmp_out_tmp_delt, tmp_out_dr_start, tmp_delt_dr_start,
+                pcool_interact, tmp_out_tmp_delt_dr_start], axis=1)
             # Set model output (Y) variable for estimation cases
             if mod_init is True or mod_est is True or mod_assess is True:
                 if mod == "temperature":
@@ -402,29 +432,25 @@ class ModelIO(object):
             tmp_delt_co2 = data.co2['tsp_delt']
             # Outdoor air fraction setpoint difference
             oaf_delt_co2 = data.co2['ven_delt_pct']
-            # Hours since DR event started
-            dr_start_co2 = data.co2['hrs_since_dr_st']
-            # Hours since DR event ended
-            dr_end_co2 = data.co2['hrs_since_dr_st']
-            # Hours since pre-cooling started
-            pcool_start_co2 = data.co2['hrs_since_pc_st']
             # Temperature set point difference, previous time step
             tmp_delt_lag_co2 = data.co2['tsp_delt_lag']
             # Outdoor set point difference, previous time step
             oaf_delt_lag_co2 = data.co2['ven_delt_pct_lag']
             # Temp. set point and outdoor air fraction difference interaction
-            tmp_oaf_interact_co2 = tmp_delt_co2 * oaf_delt_co2
+            tmp_oaf_co2 = tmp_delt_co2 * oaf_delt_co2
+            # Outdoor temperature and temperature delta
+            tmp_out_tmp_delt = temp_out_co2 * tmp_delt_co2
+            # Outdoor humidity and temperature delta
+            rh_out_tmp_delt = rh_out_co2 * tmp_delt_co2
+
             # Intercept term
             intercept_co2 = intercept = np.ones(len(occ_frac_co2))
 
             # Initialize variables for CO2 model
-
-            # Set model input (X) variables
             self.X_all = np.stack([
-                temp_out_co2, rh_out_co2, occ_frac_co2,
-                tmp_delt_co2, oaf_delt_co2, dr_start_co2, dr_end_co2,
-                tmp_delt_lag_co2, oaf_delt_lag_co2, tmp_oaf_interact_co2,
-                pcool_start_co2, intercept_co2], axis=1)
+                intercept_co2, temp_out_co2, rh_out_co2, occ_frac_co2,
+                tmp_delt_co2, oaf_delt_co2, tmp_delt_lag_co2, oaf_delt_lag_co2,
+                tmp_oaf_co2, tmp_out_tmp_delt, rh_out_tmp_delt], axis=1)
             # Set model output (Y) variable for estimation cases
             if mod_init is True or mod_est is True or mod_assess is True:
                 self.Y_all = data.co2['co2_in_delt']
@@ -445,18 +471,26 @@ class ModelIO(object):
 
             # Natural illuminance
             lt_out = data.lt['lt_nat']
+            # Base lighting schedule
+            lt_base = data.lt['base_lt_frac']
             # Lighting power difference
-            lt_delta = data.lt['lt_pwr_delt']
+            lt_delt_pct = data.lt['lt_pwr_delt_pct']
+            # Natural illuminance * lighting power reduction
+            lt_nat_pwr = lt_out * lt_delt_pct
+            # Base lighting * lighting power reduction
+            lt_base_delt = lt_base * lt_delt_pct
+            # Natural illuminance * base lighting * lighting
             # Intercept term
             intercept_lt = intercept = np.ones(len(lt_out))
 
             # Set model input (X) variables
-            self.X_all = np.stack([lt_out, lt_delta, intercept_lt], axis=1)
+            self.X_all = np.stack([
+                intercept_lt, lt_delt_pct, lt_nat_pwr, lt_base_delt], axis=1)
             # Set model output (Y) variable for estimation cases
             if mod_init is True or mod_est is True or mod_assess is True:
                 self.Y_all = data.lt['lt_in_delt_pct']
 
-        elif mod == "temperature (pre-cool)":
+        elif mod == "temperature_precool":
             # If model is being initialized and model assessment is requested,
             # or previously initialized model is being assessed,
             # set training/testing indices to use on the demand/temp. data
@@ -484,15 +518,22 @@ class ModelIO(object):
             tmp_delta_lag = data.pc_tmp['tsp_delt_lag']
             # Hours since pre-cooling started
             pcool_start = data.pc_tmp['hrs_since_pc_st']
+            # Temp. set point difference, outdoor temp.
+            tmp_out_tmp_delt = temp_out * tmp_delta
+            # Outdoor temp., since pre-cooling started
+            tmp_out_pcool_start = temp_out * pcool_start
+            # Temp. set point difference, since pre-cooling started
+            tmp_delta_pcool_start = tmp_delta * pcool_start
             # Temp. set point difference, outdoor temperature, and DR st. time
-            tmp_out_pc_start_interact = tmp_delta * temp_out * pcool_start
+            tmp_out_pc_start = tmp_delta * temp_out * pcool_start
             # Set a vector of ones for intercept estimation
-            intercept = np.ones(len(occ_frac))       
+            intercept = np.ones(len(occ_frac))
 
             # Set model input (X) variables
             self.X_all = np.stack([
-                temp_out, rh_out, occ_frac, tmp_delta, pcool_start,
-                tmp_delta_lag, tmp_out_pc_start_interact, intercept], axis=1)
+                intercept, temp_out, rh_out, occ_frac, tmp_delta, pcool_start,
+                tmp_out_tmp_delt, tmp_out_pcool_start, tmp_delta_pcool_start,
+                tmp_out_pc_start], axis=1)
             # Set model output (Y) variable for estimation cases
             if mod_init is True or mod_est is True or mod_assess is True:
                 self.Y_all = data.pc_tmp['t_in_delt']
@@ -618,7 +659,10 @@ def main(base_dir):
             if opts.mod_assess is True:
                 print("Starting " + mod + " sub-model assessment...", end="",
                       flush=True)
-                run_mod_assessment(handyfilesvars, trace, mod, iog)
+                # Set reference coefficient values, estimated using a
+                # frequentist regression approach
+                refs = dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))]
+                run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
                 print("Complete.")
 
     elif opts.mod_assess is True:
@@ -642,7 +686,11 @@ def main(base_dir):
             # Initialize variable inputs and outputs for the given model type
             iog = ModelIO(handyfilesvars, opts.mod_init, opts.mod_est,
                           opts.mod_assess, mod, dat)
-            run_mod_assessment(handyfilesvars, trace, mod, iog)
+
+            # Set reference coefficient values, estimated using a frequentist
+            # regression approach
+            refs = dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))]
+            run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
             print("Complete.")
     else:
 
@@ -736,7 +784,7 @@ def run_mod_prediction(handyfilesvars, trace, mod, dat, n_samples):
     return ppc
 
 
-def run_mod_assessment(handyfilesvars, trace, mod, iog):
+def run_mod_assessment(handyfilesvars, trace, mod, iog, refs):
 
     # Plot parameter traces
     az.plot_trace(trace)
@@ -744,7 +792,9 @@ def run_mod_assessment(handyfilesvars, trace, mod, iog):
         "diagnostic_plots", handyfilesvars.mod_dict[mod]["fig_names"][0])
     plt.gcf().savefig(fig1_path)
     # Plot parameter posterior distributions
-    az.plot_posterior(trace)
+    az.plot_posterior(
+        trace, var_names=[handyfilesvars.mod_dict[mod]["var_names"][0]],
+        ref_val=refs)
     fig2_path = path.join(
         "diagnostic_plots", handyfilesvars.mod_dict[mod]["fig_names"][1])
     plt.gcf().savefig(fig2_path)
