@@ -661,7 +661,8 @@ def main(base_dir):
                       flush=True)
                 # Set reference coefficient values, estimated using a
                 # frequentist regression approach
-                refs = dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))]
+                refs = list(
+                    dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
                 run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
                 print("Complete.")
 
@@ -689,7 +690,8 @@ def main(base_dir):
 
             # Set reference coefficient values, estimated using a frequentist
             # regression approach
-            refs = dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))]
+            refs = list(
+                dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
             run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
             print("Complete.")
     else:
