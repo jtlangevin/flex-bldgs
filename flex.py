@@ -5,11 +5,13 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams
 import numpy as np
 from numpy.polynomial.polynomial import polyfit
 from scipy.special import softmax
+from scipy import stats
 from os import getcwd, path
 from argparse import ArgumentParser
 import pickle
 import arviz as az
 from matplotlib import pyplot as plt
+import matplotlib as mpl
 tt.config.compute_value = "ignore"
 
 
@@ -41,10 +43,11 @@ class UsefulFilesVars(object):
                 co2_dat = ("data", "CO2_MO.csv")
                 pc_tmp_dat = ("data", "MO_Precooling_new.csv")
             elif mod_est is True:
-                dmd_tmp_dat, co2_dat, pc_tmp_dat = (None for n in range(2))
+                dmd_tmp_dat, co2_dat, pc_tmp_dat = (
+                    ("data", "test_update.csv") for n in range(3))
             else:
                 dmd_tmp_dat, co2_dat, pc_tmp_dat = (
-                    ("data", "test.csv") for n in range(3))
+                    ("data", "test_predict.csv") for n in range(3))
             # Set stored model data files
             stored_tmp = ("model_stored", "tmp_mo_n.pkl")
             stored_dmd = ("model_stored", "dmd_mo_n.pkl")
@@ -59,10 +62,11 @@ class UsefulFilesVars(object):
                 co2_dat = ("data", "CO2_MO.csv")
                 pc_tmp_dat = ("data", "MO_Precooling_old.csv")
             elif mod_est is True:
-                dmd_tmp_dat, co2_dat, pc_tmp_dat = (None for n in range(2))
+                dmd_tmp_dat, co2_dat, pc_tmp_dat = (
+                    ("data", "test_update.csv") for n in range(3))
             else:
                 dmd_tmp_dat, co2_dat, pc_tmp_dat = (
-                    ("data", "test.csv") for n in range(3))
+                    ("data", "test_predict.csv") for n in range(3))
             stored_tmp = ("model_stored", "tmp_mo_o.pkl")
             stored_dmd = ("model_stored", "dmd_mo_o.pkl")
             stored_co2 = ("model_stored", "co2_mo.pkl")
@@ -76,10 +80,11 @@ class UsefulFilesVars(object):
                 co2_dat = ("data", "CO2_Retail.csv")
                 pc_tmp_dat = ("data", "Retail_Precooling_new.csv")
             elif mod_est is True:
-                dmd_tmp_dat, co2_dat, pc_tmp_dat = (None for n in range(3))
+                dmd_tmp_dat, co2_dat, pc_tmp_dat = (
+                    ("data", "test_update.csv") for n in range(3))
             else:
                 dmd_tmp_dat, co2_datm, pc_tmp_dat = (
-                    ("data", "test.csv") for n in range(2))
+                    ("data", "test_predict.csv") for n in range(3))
             stored_tmp = ("model_stored", "tmp_ret_n.pkl")
             stored_dmd = ("model_stored", "dmd_ret_n.pkl")
             stored_co2 = ("model_stored", "co2_ret.pkl")
@@ -93,10 +98,11 @@ class UsefulFilesVars(object):
                 co2_dat = ("data", "CO2_Retail.csv")
                 pc_tmp_dat = ("data", "Retail_Precooling_old.csv")
             elif mod_est is True:
-                dmd_tmp_dat, co2_dat, pc_tmp_dat = (None for n in range(2))
+                dmd_tmp_dat, co2_dat, pc_tmp_dat = (
+                    ("data", "test_update.csv") for n in range(3))
             else:
                 dmd_tmp_dat, co2_dat, pc_tmp_dat = (
-                    ("data", "test.csv") for n in range(2))
+                    ("data", "test_predict.csv") for n in range(3))
             stored_tmp = ("model_stored", "tmp_ret_o.pkl")
             stored_dmd = ("model_stored", "dmd_ret_o.pkl")
             stored_co2 = ("model_stored", "co2_ret.pkl")
@@ -107,9 +113,9 @@ class UsefulFilesVars(object):
         if mod_init is True or mod_assess is True:
             lgt_dat = ("data", "Illuminance.csv")
         elif mod_est is True:
-            lgt_dat = None
+            lgt_dat = ("data", "test_update.csv")
         else:
-            lgt_dat = ("data", "test.csv")
+            lgt_dat = ("data", "test_predict.csv")
         stored_lt = ("model_stored", "lt.pkl")
 
         # Set data input file column names and data types for model
@@ -153,8 +159,19 @@ class UsefulFilesVars(object):
         # re-estimation; these will be the same across models
         elif mod_est is True:
             tmp_dmd_names_dtypes, co2_names_dtypes, lt_names_dtypes, \
-                pc_tmp_names_dtypes, self.coef_names_dtypes = (
-                    None for n in range(3))
+                pc_tmp_names_dtypes = (
+                    [('id', 'vintage', 'day_typ', 'day_num', 'hour', 'climate',
+                      'dmd_delt_sf', 't_in_delt', 'rh_in_delt', 't_out',
+                      'rh_out', 'cloud_out', 'occ_frac', 'tsp_delt',
+                      'lt_pwr_delt_pct', 'ven_delt_pct', 'mels_delt_pct',
+                      'hrs_since_dr_st', 'hrs_since_dr_end',
+                      'hrs_since_pc_end', 'hrs_since_pc_st',
+                      'tsp_delt_lag', 'lt_pwr_delt_pct_lag',
+                      'mels_delt_pct_lag', 'ven_delt_pct_lag', 'pc_tmp_inc',
+                      'pc_length'),
+                     (['<i4'] * 5 + ['<U25'] + ['<f8'] * 21)]
+                    for n in range(4))
+            self.coef_names_dtypes = None
         # Set data input file column names and data types for model
         # prediction; these will be the same across models
         else:
@@ -181,7 +198,8 @@ class UsefulFilesVars(object):
                 "var_names": ['ta_params', 'ta_sd', 'ta'],
                 "fig_names": [
                     "traceplots_tmp.png", "postplots_tmp.png",
-                    "ppcheck_tmp.png", "scatter_tmp.png"]
+                    "ppcheck_tmp.png", "scatter_tmp.png",
+                    "update_tmp.png"]
             },
             "demand": {
                 "io_data": [dmd_tmp_dat, stored_dmd],
@@ -189,7 +207,8 @@ class UsefulFilesVars(object):
                 "var_names": ['dmd_params', 'dmd_sd', 'dmd'],
                 "fig_names": [
                     "traceplots_dmd.png", "postplots_dmd.png",
-                    "ppcheck_dmd.png", "scatter_dmd.png"]
+                    "ppcheck_dmd.png", "scatter_dmd.png",
+                    "update_dmd.png"]
             },
             "co2": {
                 "io_data": [co2_dat, stored_co2],
@@ -197,7 +216,8 @@ class UsefulFilesVars(object):
                 "var_names": ['co2_params', 'co2_sd', 'co2'],
                 "fig_names": [
                     "traceplots_co2.png", "postplots_co2.png",
-                    "ppcheck_co2.png", "scatter_co2.png"]
+                    "ppcheck_co2.png", "scatter_co2.png",
+                    "update_co2.png"]
             },
             "lighting": {
                 "io_data": [lgt_dat, stored_lt],
@@ -205,7 +225,8 @@ class UsefulFilesVars(object):
                 "var_names": ['lt_params', 'lt_sd', 'lt'],
                 "fig_names": [
                     "traceplots_lt.png", "postplots_lt.png",
-                    "ppcheck_lt.png", "scatter_lt.png"]
+                    "ppcheck_lt.png", "scatter_lt.png",
+                    "update_lt.png"]
             },
             "temperature_precool": {
                 "io_data": [pc_tmp_dat, stored_pc_tmp],
@@ -213,7 +234,8 @@ class UsefulFilesVars(object):
                 "var_names": ['ta_pc_params', 'ta_pc_sd', 'ta_pc'],
                 "fig_names": [
                     "traceplots_tmp_pc.png", "postplots_tmp_pc.png",
-                    "ppcheck_tmp_pc.png", "scatter_tmp_pc.png"]
+                    "ppcheck_tmp_pc.png", "scatter_tmp_pc.png",
+                    "update_tmp_pc.png"]
             }
 
         }
@@ -223,14 +245,19 @@ class ModelDataLoad(object):
     """Load the data files needed to initialize, estimate, or run models.
 
     Attributes:
-        dmd_tmp (numpy.ndarray): Input/output data for demand/temp. models.
-        pc_tmp (numpy.ndarray): Input/output data for pre-cooling model.
-        co2 (numpy.ndarray): Input/output data for CO2 model.
-        lt (numpy.ndarray): Input/output data for lighting model.
-        coefs (numpy.ndarray): Ref. parameter coefficient values across models.
+        handyfilesvars (object): Useful variable data.
+        mod_init (Boolean): Flag for model initialization.
+        mod_assess (Boolean): Flag for model assessment.
+        mod_est (Boolean): Flag for model re-estimation.
+        update (int): Segment of input data to use in re-estimating model
+            parameters or making predictions.
+        ndays_update (int): Number of days/DR events represented by the
+            segment of input data for the model updating case.
+
     """
 
-    def __init__(self, handyfilesvars, mod_init, mod_assess, scn):
+    def __init__(self, handyfilesvars, mod_init, mod_assess,
+                 mod_est, update, ndays_update):
         """Initialize class attributes."""
 
         # Initialize plug load delta and price delta as None
@@ -294,20 +321,30 @@ class ModelDataLoad(object):
                     "temperature"]["io_data_names"][0],
                 dtype=handyfilesvars.mod_dict[
                     "temperature"]["io_data_names"][1])
-            # Restrict prediction input file to appropriate scenario (if
-            # applicable)
-            if scn is not None:
+            # Restrict prediction input file to appropriate prediction or
+            # model estimation update data (if applicable)
+            if mod_est is False and update is not None:
                 common_data = common_data[
-                    np.where(common_data['Scn'] == (scn + 1))]
+                    np.where(common_data['Scn'] == (update + 1))]
+            elif mod_est is True and update is not None and \
+                    ndays_update is not None:
+                day_sequence = list(
+                    range((update * ndays_update) + 1,
+                          ((update + 1) * ndays_update) + 1))
+                common_data = common_data[
+                    np.in1d(common_data['day_num'], day_sequence)]
             # Set inputs to demand, temperature, co2, and lighting models
             # from prediction input file
             self.dmd_tmp, self.co2, self.lt, self.pc_tmp = (
-                common_data for n in range(3))
+                common_data for n in range(4))
 
             # Set plug load delta and price delta to values from prediction
             # input file (these are not predicted via a Bayesian model)
-            self.plug_delt = common_data['mels_delt_pct']
-            self.price_delt = common_data['delt_price_kwh']
+            if mod_est is False:
+                self.plug_delt = common_data['mels_delt_pct']
+                self.price_delt = common_data['delt_price_kwh']
+            else:
+                self.plug_delt, self.price_delt = (None for n in range(2))
 
 
 class ModelIO(object):
@@ -608,12 +645,12 @@ def main(base_dir):
 
     # Proceed with model inference only if user flags doing so; otherwise,
     # use previously estimated models to conduct assessment or make predictions
-    if opts.mod_init is True or opts.mod_est is True:
+    if opts.mod_init is True:
 
         print("Loading input data...", end="", flush=True)
         # Read-in input data
         dat = ModelDataLoad(handyfilesvars, opts.mod_init, opts.mod_assess,
-                            scn=None)
+                            opts.mod_est, update=None, ndays_update=None)
         print("Complete.")
 
         # Loop through all model types (temperature, demand, co2, lighting)
@@ -666,12 +703,114 @@ def main(base_dir):
                 run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
                 print("Complete.")
 
+    elif opts.mod_est is True:
+
+        # Set total number of model updates to execute
+        updates = 8
+        # Set number of days/events per update data batch
+        ndays_update = 10
+        # Initialize model parameter traces across all updates, stored in list
+        traces = []
+        # Loop through all model update instances and update parameter
+        # estimates in accordance with new data added with each update
+        for update in range(updates):
+            print("Loading input data...", end="", flush=True)
+            # Read-in input data
+            dat = ModelDataLoad(handyfilesvars, opts.mod_init, opts.mod_assess,
+                                opts.mod_est, update, ndays_update)
+            print("Complete.")
+
+            # Loop through model types (restrict to demand model for now)
+            for mod in ["demand"]:
+                print("Initializing " + mod + " sub-model variables...",
+                      end="", flush=True)
+                # Initialize variable inputs/outputs for the given model type
+                iog = ModelIO(handyfilesvars, opts.mod_init, opts.mod_est,
+                              opts.mod_assess, mod, dat)
+                # Finalize variable inputs/outputs for the given model type
+                iot = ModelIOTrain(iog, opts.mod_init, opts.mod_assess)
+                print("Complete.")
+
+                # Perform model inference
+                with pm.Model() as var_mod:
+                    # For the first update, reload existing trace from model
+                    # initialization run
+                    if update == 0:
+                        print("Loading " + mod + " sub-model...", end="",
+                              flush=True)
+                        with open(
+                            path.join(base_dir, *handyfilesvars.mod_dict[mod][
+                                "io_data"][1]), 'rb') as store:
+                            trace = pickle.load(store)['trace']
+                            traces = [trace]
+                        print("Complete.")
+                    print("Setting " + mod +
+                          " sub-model priors and likelihood...",
+                          end="", flush=True)
+                    # Pull beta trace and set shorthand name
+                    t_params = trace[
+                        handyfilesvars.mod_dict[mod]["var_names"][0]]
+                    # Determine means and standard deviation of normal
+                    # distributions for each beta parameter in the trace
+                    params_mean = t_params.mean(axis=0)
+                    params_sd = t_params.std(axis=0)
+                    # Set beta priors based on beta posteriors from last
+                    # iteration
+                    params = pm.Normal(
+                        handyfilesvars.mod_dict[mod]["var_names"][0],
+                        params_mean, params_sd,
+                        shape=(iot.X.shape[1]))
+                    # Set a prior for the model error term using a kernel
+                    # density estimation on the posterior error trace (
+                    # as the posterior for this term has an unknown
+                    # distribution)
+                    sd = from_posterior(
+                        handyfilesvars.mod_dict[mod]["var_names"][1], trace[
+                            handyfilesvars.mod_dict[mod]["var_names"][1]])
+                    # Likelihood of outcome estimator
+                    est = pm.math.dot(iot.X, params)
+                    # Likelihood of outcome
+                    var = pm.Normal(
+                        handyfilesvars.mod_dict[mod]["var_names"][2],
+                        mu=est, sd=sd, observed=iot.Y)
+                    print("Complete.")
+                    # Draw posterior samples
+                    trace = pm.sample(chains=2, cores=1, init="advi")
+                    # Append current updates' traces to the traces from
+                    # all previous updates
+                    traces.append(trace)
+
+            # After the last update, generate some diagnostic plots showing
+            # how parameter estimates evolved across all updates
+            if update == (updates - 1):
+                plot_updating(
+                    handyfilesvars,
+                    handyfilesvars.mod_dict[mod]["var_names"][0], traces, mod)
+
+            # # Store model, trace, and predictor variables
+            # with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
+            #         "io_data"][1]), 'wb') as co_s:
+            #     print("Writing out " + mod + " sub-model...",
+            #           end="", flush=True)
+            #     pickle.dump({'trace': trace, 'model': var_mod}, co_s)
+
+            # If model assessment is desired, generate diagnostic plots
+            if opts.mod_assess is True:
+                print("Starting " + mod + " sub-model assessment...", end="",
+                      flush=True)
+                # Set reference coefficient values, estimated using a
+                # frequentist regression approach
+                refs = list(
+                    dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
+                run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
+                print("Complete.")
+
     elif opts.mod_assess is True:
 
         print("Loading input data...", end="", flush=True)
         # Read-in input data
         dat = ModelDataLoad(handyfilesvars, opts.mod_init, opts.mod_assess,
-                            scn=None)
+                            opts.mod_est, update=None, ndays_update=None)
         print("Complete.")
 
         # Loop through all model types (temperature, demand, co2, lighting)
@@ -712,7 +851,7 @@ def main(base_dir):
         betas_choice = np.array([0.01, 0, 0, 0, -100, 10])
 
         # Loop through the set of scenarios considered for FY19 EOY deliverable
-        for scn in [1]:
+        for scn in n_scenarios:
             # Sample noise to use in the choice model
             rand_elem = np.random.normal(
                 loc=0, scale=1, size=(n_samples, n_choices))
@@ -721,7 +860,8 @@ def main(base_dir):
             print("Loading input data...")
             # Read-in input data for scenario
             dat = ModelDataLoad(
-                handyfilesvars, opts.mod_init, opts.mod_assess, scn)
+                handyfilesvars, opts.mod_init, opts.mod_assess,
+                opts.mod_est, update=scn, ndays_update=None)
 
             for mod in handyfilesvars.mod_dict.keys():
                 # Reload trace
@@ -860,6 +1000,54 @@ def output_diagnostics(handyfilesvars, trace, iot, mod):
     fig2_path = path.join(
         "diagnostic_plots", handyfilesvars.mod_dict[mod]["fig_names"][3])
     fig2.savefig(fig2_path)
+
+
+def from_posterior(param, samples):
+
+    smin, smax = np.min(samples), np.max(samples)
+    width = smax - smin
+    x = np.linspace(smin, smax, 100)
+    y = stats.gaussian_kde(samples)(x)
+    # What was never sampled should have a small probability but not 0,
+    # so we'll extend the domain and use linear approximation of density on it
+    x = np.concatenate([[x[0] - 3 * width], x, [x[-1] + 3 * width]])
+    y = np.concatenate([[0], y, [0]])
+    return pm.Interpolated(param, x, y)
+
+
+def plot_updating(handyfilesvars, param, traces, mod):
+
+    # Set color map for plots
+    cmap = mpl.cm.autumn
+    # Initialize subplots and figure object
+    fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(8, 4))
+    # Develop and plot kernel density estimators of parameter traces,
+    # and plot these estimators across each successive parameter update
+    for update_i, trace in enumerate(traces):
+        # Outdoor temperature
+        samples_oat = np.array([x[1] for x in trace[param]])
+        smin_oat, smax_oat = np.min(samples_oat), np.max(samples_oat)
+        x_oat = np.linspace(smin_oat, smax_oat, 100)
+        y_oat = stats.gaussian_kde(samples_oat)(x_oat)
+        axs[0].plot(x_oat, y_oat, color=cmap(1 - update_i / len(traces)))
+        # Set point adjustment level
+        samples_sp = np.array([x[4] for x in trace[param]])
+        smin_sp, smax_sp = np.min(samples_sp), np.max(samples_sp)
+        x_sp = np.linspace(smin_sp, smax_sp, 100)
+        y_sp = stats.gaussian_kde(samples_sp)(x_sp)
+        axs[1].plot(x_sp, y_sp, color=cmap(1 - update_i / len(traces)))
+    # Set OAT plot title and axis labels
+    axs[0].set_title("Outdoor Temperature")
+    axs[0].set_ylabel('Frequency')
+    # Set set point temperature plot title and axis labels
+    axs[1].set_title("Set Point Offset")
+    axs[1].set_ylabel('Frequency')
+    # Set figure layout parameter
+    fig.tight_layout(pad=1.0)
+    # Determine figure path and save figure
+    fig_path = path.join(
+        "diagnostic_plots", handyfilesvars.mod_dict[mod]["fig_names"][4])
+    fig.savefig(fig_path)
 
 
 if __name__ == '__main__':
