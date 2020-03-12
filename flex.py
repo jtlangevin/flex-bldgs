@@ -12,6 +12,7 @@ import pickle
 import arviz as az
 from matplotlib import pyplot as plt
 import matplotlib as mpl
+import json
 tt.config.compute_value = "ignore"
 
 
@@ -23,6 +24,7 @@ class UsefulFilesVars(object):
         coef_names_dtypes (list): Variable names/formats for coefficients CSV
         mod_dict (dict): Dict with information on input data, variables, and
             output plotting file names for each model type.
+        predict_out (JSON): Output JSON with strategy recommendation pcts.
     """
 
     def __init__(self, bldg_type_vint, mod_init, mod_est, mod_assess):
@@ -177,15 +179,16 @@ class UsefulFilesVars(object):
         else:
             tmp_dmd_names_dtypes, co2_names_dtypes, lt_names_dtypes, \
                 pc_tmp_names_dtypes = ([(
-                    'Name', 'Scn', 't_out', 'rh_out', 'lt_nat',
-                    'occ_frac', 'delt_price_kwh', 'hrs_since_dr_st',
+                    'Name', 'Hr', 't_out', 'rh_out', 'lt_nat',
+                    'occ_frac', 'base_lt_frac', 'delt_price_kwh',
+                    'hrs_since_dr_st',
                     'hrs_since_dr_end', 'hrs_since_pc_st',
                     'hrs_since_pc_end', 'tsp_delt', 'lt_pwr_delt_pct',
                     'ven_delt_pct', 'mels_delt_pct', 'tsp_delt_lag',
                     'lt_pwr_delt_pct_lag', 'ven_delt_pct_lag',
                     'mels_delt_pct_lag', 'pc_tmp_inc', 'pc_length',
                     'lt_pwr_delt'),
-                    (['<U25'] + ['<f8'] * 21)] for n in range(3))
+                    (['<U25'] + ['<f8'] * 22)] for n in range(4))
             self.coef_names_dtypes = None
 
         # For each model type, store information on input/output data file
@@ -239,20 +242,28 @@ class UsefulFilesVars(object):
             }
 
         }
+        self.predict_out = ("data", "recommendations.json")
 
 
 class ModelDataLoad(object):
     """Load the data files needed to initialize, estimate, or run models.
 
     Attributes:
-        handyfilesvars (object): Useful variable data.
-        mod_init (Boolean): Flag for model initialization.
-        mod_assess (Boolean): Flag for model assessment.
-        mod_est (Boolean): Flag for model re-estimation.
-        update (int): Segment of input data to use in re-estimating model
-            parameters or making predictions.
-        ndays_update (int): Number of days/DR events represented by the
-            segment of input data for the model updating case.
+        dmd_tmp (numpy ndarray): Input data for demand and temperature
+            model initialization.
+        co2 (numpy ndarray): Input data for CO2 model initialization.
+        lt (numpy ndarray): Input data for lighting model initialization.
+        pc_tmp (numpy ndarray): Input data for pre-cooling model init.
+        coefs (tuple): Path to CSV file with regression coefficients for
+            use in model re-estimation.
+        oaf_delt (numpy ndarray): Outdoor air adjustment fractions by DR
+            strategy for use in model prediction.
+        plug_delt (numpy ndarray): Plug load adjustment fractions by DR
+            strategy for use in model prediction.
+        price_delt (numpy ndarray): $/kWh incentive by DR strategy for use
+            in model prediction.
+        hr (numpy ndarray): Hours covered by model prediction input data
+        strategy (numpy ndarray): Names of strategies to make predictions for.
 
     """
 
@@ -260,9 +271,9 @@ class ModelDataLoad(object):
                  mod_est, update, ndays_update):
         """Initialize class attributes."""
 
-        # Initialize plug load delta and price delta as None
-        self.coefs, self.plug_delt, self.price_delt = (
-            None for n in range(3))
+        # Initialize OAF delta, plug load delta and price delta as None
+        self.coefs, self.oaf_delt, self.plug_delt, self.price_delt = (
+            None for n in range(4))
         # Data read-in for model initialization is specific to each type
         # of model (though demand/temperature share the same input data);
         if mod_init is True or mod_assess is True:
@@ -323,9 +334,9 @@ class ModelDataLoad(object):
                     "temperature"]["io_data_names"][1])
             # Restrict prediction input file to appropriate prediction or
             # model estimation update data (if applicable)
-            if mod_est is False and update is not None:
-                common_data = common_data[
-                    np.where(common_data['Scn'] == (update + 1))]
+            if mod_est is False:
+                self.hr = common_data['Hr']
+                self.strategy = common_data['Name']
             elif mod_est is True and update is not None and \
                     ndays_update is not None:
                 day_sequence = list(
@@ -333,6 +344,8 @@ class ModelDataLoad(object):
                           ((update + 1) * ndays_update) + 1))
                 common_data = common_data[
                     np.in1d(common_data['day_num'], day_sequence)]
+                self.hr = None
+                self.strategy = None
             # Set inputs to demand, temperature, co2, and lighting models
             # from prediction input file
             self.dmd_tmp, self.co2, self.lt, self.pc_tmp = (
@@ -341,16 +354,22 @@ class ModelDataLoad(object):
             # Set plug load delta and price delta to values from prediction
             # input file (these are not predicted via a Bayesian model)
             if mod_est is False:
+                self.oaf_delt = common_data['ven_delt_pct']
                 self.plug_delt = common_data['mels_delt_pct']
                 self.price_delt = common_data['delt_price_kwh']
             else:
-                self.plug_delt, self.price_delt = (None for n in range(2))
+                self.oaf_delt, self.plug_delt, self.price_delt = (
+                    None for n in range(2))
 
 
 class ModelIO(object):
     """Initialize input/output variables/data structure for each model
 
     Attributes:
+        train_inds (numpy ndarray): Indices to use in restricting data for
+            use in model training.
+        test_inds (numpy ndarray): Indices to use in restricting data for
+            use in model testing.
         X_all (numpy ndarray): Model input observations.
         Y_all (numpy ndarray): Model output observations.
     """
@@ -620,6 +639,20 @@ class ModelIOTest():
             self.Y = io_dat.Y_all
 
 
+class ModelIOPredict():
+    """Pull subset of data observations for use in model prediction.
+
+    Attributes:
+        X (numpy ndarray): Input data subset to use for model prediction.
+    """
+
+    def __init__(self, io_dat, hr_inds):
+        """Initialize class attributes."""
+
+        # Restrict data to the current hour in the prediction time horizon
+        self.X = io_dat.X_all[hr_inds]
+
+
 def main(base_dir):
     """Implement Bayesian network and plot resultant parameter estimates."""
 
@@ -721,7 +754,7 @@ def main(base_dir):
             print("Complete.")
 
             # Loop through model types (restrict to demand model for now)
-            for mod in ["demand"]:
+            for mod in handyfilesvars.mod_dict.keys():
                 print("Initializing " + mod + " sub-model variables...",
                       end="", flush=True)
                 # Initialize variable inputs/outputs for the given model type
@@ -835,56 +868,69 @@ def main(base_dir):
             print("Complete.")
     else:
 
-        # Set number of control choices
-        n_choices = 16
+        print("Loading input data...")
+        # Read-in input data for scenario
+        dat = ModelDataLoad(
+            handyfilesvars, opts.mod_init, opts.mod_assess,
+            opts.mod_est, update=None, ndays_update=None)
+        # Set number of hours to predict across
+        n_hrs = len(np.unique(dat.hr))
+        # Find names of candidate DR strategies
+        names = np.unique(dat.strategy)
+        # Set number of DR strategies to predict across
+        n_choices = len(names)
         # Set number of samples to draw. for predictions
         n_samples = 1000
-        # Set number of scenarios to test
-        n_scenarios = 1
         # Initialize posterior predictive data dict
         pp_dict = {
             key: [] for key in handyfilesvars.mod_dict.keys()}
+        # Sample noise to use in the choice model
+        rand_elem = np.random.normal(
+            loc=0, scale=1, size=(n_samples, n_choices))
+        # Initialize a numpy array that stores the count of the number of
+        # times each candidate DR strategy is selected across simulated hours
+        counts = np.zeros(n_choices)
+        # Initialize a total count to use in normalizing number of selections
+        # by strategy such that it is reported out as a % of simulated hours
+        counts_denom = 0
 
-        # Set the constant set of betas across alternatives to use in choice
-        # betas_choice = np.array([0.05, -20, -50, -50, -100, 10])
-
-        betas_choice = np.array([0.01, 0, 0, 0, -100, 10])
+        # Use latest set of coefficients from DCE future scenario results
+        # (Order: economic benefit, temperature, temperature precool, lighting,
+        # OAF pct delta, plug load pct delta, intercept)
+        betas_choice = np.array([
+            0.000345, -0.491951, 0.127805, -1.246971, 0.144217, -2.651832])
 
         # Loop through the set of scenarios considered for FY19 EOY deliverable
-        for scn in n_scenarios:
-            # Sample noise to use in the choice model
-            rand_elem = np.random.normal(
-                loc=0, scale=1, size=(n_samples, n_choices))
-            print(("Running input scenario " + str(scn+1)) + "...")
-
-            print("Loading input data...")
-            # Read-in input data for scenario
-            dat = ModelDataLoad(
-                handyfilesvars, opts.mod_init, opts.mod_assess,
-                opts.mod_est, update=scn, ndays_update=None)
-
+        for hr in range(n_hrs):
+            print("Making predictions for hour " + str(hr+1))
+            # Set data index that is unique to the current hour
+            inds = np.where(dat.hr == (hr+1))
             for mod in handyfilesvars.mod_dict.keys():
                 # Reload trace
                 with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
                         "io_data"][1]), 'rb') as store:
                     trace = pickle.load(store)['trace']
                 pp_dict[mod] = run_mod_prediction(
-                    handyfilesvars, trace, mod, dat, n_samples)
-            # print("Complete.")
-
-            print("Making predictions...")
+                    handyfilesvars, trace, mod, dat, n_samples, inds)
             # Multiply change in demand/sf by sf and price delta to get total
             # cost difference for the operator
-            cost_delt = pp_dict["demand"]['dmd'] * sf * dat.price_delt
+            cost_delt = pp_dict["demand"]['dmd'] * sf * dat.price_delt[inds]
+            # Extend oaf delta values for each choice across all samples
+            oaf_delt = np.tile(dat.oaf_delt[inds], (n_samples, 1))
             # Extend plug load delta values for each choice across all samples
-            plug_delt = np.tile(dat.plug_delt, (n_samples, 1))
+            plug_delt = np.tile(dat.plug_delt[inds], (n_samples, 1))
             # Extend intercept input for each choice across all samples
-            intercept = np.tile(np.ones(n_choices), (n_samples, 1))
+            # NOTE: CURRENTLY NO INTERCEPT TERM IN DCE ANALYSIS OUTPUTS
+            # intercept = np.tile(np.ones(n_choices), (n_samples, 1))
             # Stack all model inputs into a single array
+            # x_choice = np.stack([
+            #     cost_delt, pp_dict["temperature"]["ta"],
+            #     pp_dict["co2"]["co2"], pp_dict["lighting"]["lt"],
+            #     plug_delt, intercept])
             x_choice = np.stack([
                 cost_delt, pp_dict["temperature"]["ta"],
-                pp_dict["co2"]["co2"], pp_dict["lighting"]["lt"],
-                plug_delt, intercept])
+                pp_dict["temperature_precool"]["ta_pc"],
+                pp_dict["lighting"]["lt"], oaf_delt, plug_delt])
             # Multiply model inputs by betas to yield choice logits
             choice_logits = np.sum([x_choice[i] * betas_choice[i] for
                                    i in range(len(x_choice))], axis=0) + \
@@ -895,30 +941,48 @@ def main(base_dir):
             choice_out = [
                 np.random.choice(n_choices, 1000, p=x) for x in choice_probs]
             # Report frequency with which each choice occurs for the scenario
-            unique, counts = np.unique(choice_out, return_counts=True)
-            print(
-                "Choice number and probability of selecting "
-                "(choices not listed are zero): " + str(dict(zip(
-                    (unique + 1), (counts / np.sum(counts))))))
+            unique, counts_hr = np.unique(choice_out, return_counts=True)
+            # Add to count of frequency with which each DR strategy is
+            # selected
+            counts[unique] += counts_hr
+            # Add to total number of simulated hours
+            counts_denom += np.sum(counts_hr)
+        # Store summary of the percentage of simulated hours that each
+        # DR strategy was predicted to be selected in a dict
+        predict_out = {
+            "notes": (
+                "Percentage of simulations in which each candidate DR "
+                "strategy is chosen for current event"),
+            "units": "%",
+            "predictions": {
+                x: round(((y / counts_denom) * 100), 1) for
+                x, y in zip(names, counts)}
+        }
+        # Write summary dict out to JSON file
+        with open(path.join(
+                base_dir, *handyfilesvars.predict_out), "w") as jso:
+            json.dump(predict_out, jso, indent=2)
 
 
-def run_mod_prediction(handyfilesvars, trace, mod, dat, n_samples):
+def run_mod_prediction(handyfilesvars, trace, mod, dat, n_samples, inds):
     # Initialize variable inputs and outputs for the given model type
-    iop = ModelIO(handyfilesvars, opts.mod_init, opts.mod_est,
-                  opts.mod_assess, mod, dat)
+    iop_all = ModelIO(handyfilesvars, opts.mod_init, opts.mod_est,
+                      opts.mod_assess, mod, dat)
+    # Restrict variable inputs and outputs to current prediction hour
+    iop = ModelIOPredict(iop_all, inds)
     with pm.Model() as var_mod:
         # Set parameter priors (betas, error)
         params = pm.Normal(
             handyfilesvars.mod_dict[mod][
-                "var_names"][0], 0, 10, shape=(iop.X_all.shape[1]))
+                "var_names"][0], 0, 10, shape=(iop.X.shape[1]))
         sd = pm.HalfNormal(
             handyfilesvars.mod_dict[mod]["var_names"][1], 20)
         # Likelihood of outcome estimator
-        est = pm.math.dot(iop.X_all, params)
+        est = pm.math.dot(iop.X, params)
         # Likelihood of outcome
         var = pm.Normal(
             handyfilesvars.mod_dict[mod]["var_names"][2],
-            mu=est, sd=sd, observed=np.zeros(iop.X_all.shape[0]))
+            mu=est, sd=sd, observed=np.zeros(iop.X.shape[0]))
         # Sample predictions for trace
         ppc = pm.sample_posterior_predictive(
             trace, samples=n_samples)
