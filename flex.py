@@ -179,15 +179,13 @@ class UsefulFilesVars(object):
         else:
             tmp_dmd_names_dtypes, co2_names_dtypes, lt_names_dtypes, \
                 pc_tmp_names_dtypes = ([(
-                    'Name', 'Hr', 't_out', 'rh_out', 'lt_nat',
-                    'occ_frac', 'base_lt_frac', 'delt_price_kwh',
-                    'hrs_since_dr_st',
-                    'hrs_since_dr_end', 'hrs_since_pc_st',
-                    'hrs_since_pc_end', 'tsp_delt', 'lt_pwr_delt_pct',
-                    'ven_delt_pct', 'mels_delt_pct', 'tsp_delt_lag',
-                    'lt_pwr_delt_pct_lag', 'ven_delt_pct_lag',
-                    'mels_delt_pct_lag', 'pc_tmp_inc', 'pc_length',
-                    'lt_pwr_delt'),
+                    'Name', 'Hr', 't_out', 'rh_out', 'lt_nat', 'base_lt_frac',
+                    'occ_frac', 'delt_price_kwh',
+                    'hrs_since_dr_st','hrs_since_dr_end', 
+                    'hrs_since_pc_st','hrs_since_pc_end',
+                    'tsp_delt', 'lt_pwr_delt_pct','ven_delt_pct', 'mels_delt_pct', 
+                    'tsp_delt_lag','lt_pwr_delt_pct_lag', 'ven_delt_pct_lag','mels_delt_pct_lag', 
+                    'pc_tmp_inc', 'pc_length','lt_pwr_delt'),
                     (['<U25'] + ['<f8'] * 22)] for n in range(4))
             self.coef_names_dtypes = None
 
@@ -462,6 +460,7 @@ class ModelIO(object):
             if mod_init is True or mod_est is True or mod_assess is True:
                 if mod == "temperature":
                     self.Y_all = data.dmd_tmp['t_in_delt']
+                    print(self.Y_al)
                 else:
                     self.Y_all = data.dmd_tmp['dmd_delt_sf']
 
