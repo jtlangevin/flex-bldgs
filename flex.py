@@ -13,6 +13,14 @@ import arviz as az
 from matplotlib import pyplot as plt
 import matplotlib as mpl
 import json
+
+from pyfmi import load_fmu
+import pandas as pd
+import random as random
+import os as os
+from datetime import date
+import datetime as dt
+
 tt.config.compute_value = "ignore"
 
 
@@ -163,7 +171,7 @@ class UsefulFilesVars(object):
             tmp_dmd_names_dtypes, co2_names_dtypes, lt_names_dtypes, \
                 pc_tmp_names_dtypes = (
                     [('id', 'vintage', 'day_typ', 'day_num', 'hour', 'climate',
-                      'dmd_delt_sf', 't_in_delt', 'rh_in_delt', 't_out',
+                      'dmd_delt_sf', 't_in_delt','rh_in_delt', 't_out',
                       'rh_out', 'cloud_out', 'occ_frac', 'tsp_delt',
                       'lt_pwr_delt_pct', 'ven_delt_pct', 'mels_delt_pct',
                       'hrs_since_dr_st', 'hrs_since_dr_end',
@@ -241,7 +249,6 @@ class UsefulFilesVars(object):
 
         }
         self.predict_out = ("data", "recommendations.json")
-
 
 class ModelDataLoad(object):
     """Load the data files needed to initialize, estimate, or run models.
@@ -357,8 +364,7 @@ class ModelDataLoad(object):
                 self.price_delt = common_data['delt_price_kwh']
             else:
                 self.oaf_delt, self.plug_delt, self.price_delt = (
-                    None for n in range(2))
-
+                    None for n in range(3))
 
 class ModelIO(object):
     """Initialize input/output variables/data structure for each model
@@ -460,7 +466,6 @@ class ModelIO(object):
             if mod_init is True or mod_est is True or mod_assess is True:
                 if mod == "temperature":
                     self.Y_all = data.dmd_tmp['t_in_delt']
-                    print(self.Y_al)
                 else:
                     self.Y_all = data.dmd_tmp['dmd_delt_sf']
 
@@ -508,6 +513,7 @@ class ModelIO(object):
                 tmp_oaf_co2, tmp_out_tmp_delt, rh_out_tmp_delt], axis=1)
             # Set model output (Y) variable for estimation cases
             if mod_init is True or mod_est is True or mod_assess is True:
+
                 self.Y_all = data.co2['co2_in_delt']
 
         elif mod == "lighting":
@@ -615,7 +621,6 @@ class ModelIOTrain():
             self.X = io_dat.X_all
             self.Y = io_dat.Y_all
 
-
 class ModelIOTest():
     """Pull subset of data observations for use in model testing.
 
@@ -636,7 +641,6 @@ class ModelIOTest():
         else:
             self.X = io_dat.X_all
             self.Y = io_dat.Y_all
-
 
 class ModelIOPredict():
     """Pull subset of data observations for use in model prediction.
@@ -753,7 +757,7 @@ def main(base_dir):
             print("Complete.")
 
             # Loop through model types (restrict to demand model for now)
-            for mod in handyfilesvars.mod_dict.keys():
+            for mod in ["demand"]:     #handyfilesvars.mod_dict.keys():
                 print("Initializing " + mod + " sub-model variables...",
                       end="", flush=True)
                 # Initialize variable inputs/outputs for the given model type
@@ -865,6 +869,30 @@ def main(base_dir):
                 dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
             run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
             print("Complete.")
+    
+    elif opts.mod_cosimulate is True:        
+        print("Cosimulation....")
+        print("Recommended strategy... [", end="", flush=True)
+
+        # find strategy with the highest weight in recommendations.json
+        recommendations = ('data','recommendations.json')
+        with open(path.join(base_dir, *recommendations), 'r') as pred:
+            predictions = json.load(pred)["predictions"]
+        
+        max_value = max(predictions.values())
+        for key, value in predictions.items():
+            if (value == max_value):
+                strategy = key
+        print(strategy + "] is selected, and schedule storing is... ", end="", flush=True)
+        
+        # get the data of the choice strategy and store to respected schedule values
+        dat = ModelDataLoad(
+                handyfilesvars, opts.mod_init, opts.mod_assess,
+                opts.mod_est, update=None, ndays_update=None)
+        trunc_dat = dat.dmd_tmp[np.where(dat.dmd_tmp['Name'] == strategy)]
+
+        cosimulate(trunc_dat)
+        print("Complete.")
     else:
 
         print("Loading input data...")
@@ -962,6 +990,194 @@ def main(base_dir):
                 base_dir, *handyfilesvars.predict_out), "w") as jso:
             json.dump(predict_out, jso, indent=2)
 
+
+def cosimulate(dat):
+
+    sim_baseline = False
+    
+
+    climate_zones = ['2A','2B','3A','3B','3C','4A','4B','4C','5A','5B','6A','6B','7A']
+
+    for cz in climate_zones:
+        cosimulate2(cz,sim_baseline,dat)
+
+
+def cosimulate2(cz, sim_baseline, dat):
+    with_plots=False
+
+    delt_clg = dat['tsp_delt'][0] #np.append(dat['tsp_delt'], np.zeros(14))
+    pct_lgt = dat['lt_pwr_delt_pct'][0] #np.append(dat['lt_pwr_delt_pct'], np.zeros(14))
+    pct_plg = dat['mels_delt_pct'][0] #np.append(dat['mels_delt_pct'], np.zeros(14))
+
+    #cz = '3C'
+    fmu_path = 'fmu_files/MediumOfficeDetailed_2004_' + cz + '.fmu'  
+    output_csv = 'results_MO_' + cz + '.csv'
+    baseline_csv = 'baseline_MO_' + cz + '.csv'
+    
+    if sim_baseline == False:
+        baseline_df = pd.read_csv(baseline_csv, parse_dates=True)
+
+        dr_dict = {"2A":[17,20],"2B":[17,20],"3A":[19,22],"3B":[18,21],"3C":[19,22],
+            "4A":[12,15],"4B":[17,20],"4C":[17,20],"5A":[20,23],"5B":[17,20],
+            "6A":[16,19],"6B":[17,20],"7A":[16,19]}
+
+        dr_s_hr = dr_dict[cz][0]
+        dr_e_hr = dr_dict[cz][1]
+
+        dr_dur_hr = dr_e_hr - dr_s_hr
+    else:
+        dr_s_hr = 0
+        dr_dur_hr = 0
+
+    date_cosim = date(2006, 8, 24)
+    date_jan1 = date(2006, 1, 1)
+    date_summer_start = date(2006, 5, 1)
+    date_summer_end = date(2006, 8, 1)
+
+    cosim_start = (date_cosim - date_jan1).days * 24 #5460
+    cosim_stop = cosim_start+24
+
+    dr_start = cosim_start+dr_s_hr
+    dr_stop = dr_start+dr_dur_hr
+
+    sim_days=365
+
+    # create a schedule for EnergyPlus and measures to read as schedule
+    # Create a simulation time grid
+
+    tStart = 0
+    tStop = 3600*1*24*sim_days   ## change the timestep in EPlus to 1
+    hStep = 3600 # 60 mins
+
+    t = np.arange(tStart, tStop, hStep)
+    n_steps = len(t)
+    # Load and initialize the fmu model
+     
+    model = load_fmu(fmu_path, log_level=7)
+    model.initialize(tStart,tStop)    
+
+    # initiate np array to store the result
+    outdoor_drybulb = np.empty(n_steps)
+    outdoor_rh = np.empty(n_steps)
+
+    power = np.empty(n_steps)
+    z_temp = np.empty(n_steps)
+    z_cotwo = np.empty(n_steps)
+    z_pmv = np.empty(n_steps)
+    z_htgsp = np.empty(n_steps)
+    z_clgsp = np.empty(n_steps)
+    z_ppl = np.empty(n_steps)
+    z_lgt = np.empty(n_steps)
+    z_plg = np.empty(n_steps)
+    z_blg = np.empty(n_steps)
+    z_clg1 = np.empty(n_steps)
+    z_clg2 = np.empty(n_steps)
+
+    in_htg = np.empty(n_steps+1)
+    in_clg = np.empty(n_steps+1)
+    in_plg = np.empty(n_steps+1)
+    in_lgt = np.empty(n_steps+1)
+
+    sch_htg = [15.6,15.6,15.6,15.6,15.6,21,21,21,21,21,21,21,21,21,21,21,21,15.6,15.6,15.6,15.6,15.6,15.6,15.6]
+    sch_clg = [24 for i in range(24)]
+    sch_lgt = [0.05,0.05,0.05,0.05,0.05,0.1,0.3,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.5,0.3,0.3,0.2,0.2,0.1,0.05]
+    sch_plg = [0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.9,0.9,0.9,0.9,0.8,0.9,0.9,0.9,0.9,0.5,0.4,0.4,0.4,0.4,0.4,0.4]
+
+    in_htg[0] = sch_htg[0]
+    in_clg[0] = sch_clg[0]
+    in_lgt[0] = sch_lgt[0]
+    in_plg[0] = sch_plg[0]
+
+    i = 0
+    # Main simulation loop
+    while i < n_steps:
+        # Set the input value to the FMU
+        model.set(['InMELsSch','InLightSch','InCoolingSch'], \
+            [in_plg[i],in_lgt[i],in_clg[i]])
+
+         # Do one step of simulation
+        model.do_step(current_t = t[i], step_size=hStep, new_step=True)
+
+        # Get the outputs of the simulation
+        z_temp[i] = (model.get('ZoneTemp') * 9 / 5) + 32 #farenheit
+        z_cotwo[i] = model.get('ZoneCOTwo')
+        z_pmv[i] = model.get('ZonePMV')
+        z_htgsp[i] = model.get('ZoneHTGsp')
+        z_clgsp[i] = model.get('ZoneCLGsp')
+        z_ppl[i] = model.get('People')
+        z_lgt[i] = model.get('LightsEnergy') / 3600000 # kilowatt-hour
+        z_plg[i] = model.get('MelsEnergy') / 3600000
+        z_blg[i] = model.get('BldgPwr') / 1000
+        z_clg1[i] = model.get('CoolingEnergy1') / 3600000
+        z_clg2[i] = model.get('CoolingEnergy2') / 3600000
+
+        outdoor_drybulb[i] = model.get('OutDrybulb')
+        outdoor_rh[i] = model.get('OutRH')
+
+        hour = int((t[i]/3600)%24)
+
+        next_hour = (hour+1)%24
+
+        if i >= dr_start and i < dr_stop:
+            print('Time {!s}, hour {!s}, next_hour {!s}, cooling sp {!s}'.
+                format(i,hour,next_hour, in_clg[i]))
+            in_clg[i+1] = sch_clg[next_hour] + delt_clg
+            #in_htg[i+1] = sch_htg[next_hour]
+            in_lgt[i+1] = sch_lgt[next_hour] #* pct_lgt
+            in_plg[i+1] = sch_plg[next_hour] #* pct_plg
+        else:
+            #in_htg[i+1] = sch_htg[next_hour]
+            in_clg[i+1] = sch_clg[next_hour]
+            in_lgt[i+1] = sch_lgt[next_hour]
+            in_plg[i+1] = sch_plg[next_hour]
+
+        #print('Time {!s}, outdoor temp is {!s}, zone temp is {!s}, cooling sp is {!s}'.format(hour,outdoor_drybulb[i],z_temp[i],in_clg[i]))
+        i += 1
+
+
+    time = pd.date_range(start='8/24/2006', periods=24, freq='60min').values           
+    result = pd.DataFrame(data={'datetime':time,
+        'outdoor_drybulb':outdoor_drybulb[cosim_start:cosim_stop],
+        'outdoor_rh':outdoor_rh[cosim_start:cosim_stop],
+        'building':z_blg[cosim_start:cosim_stop],
+        'lights':z_lgt[cosim_start:cosim_stop],
+        'plugloads':z_plg[cosim_start:cosim_stop],
+        'cooling1':z_clg1[cosim_start:cosim_stop],
+        'cooling2':z_clg1[cosim_start:cosim_stop],
+        'zone_ppl':z_ppl[cosim_start:cosim_stop],
+        'zone_temp':z_temp[cosim_start:cosim_stop],
+        'zone_pmv':z_pmv[cosim_start:cosim_stop],
+        'cotwo':z_cotwo[cosim_start:cosim_stop],
+        'zone_htgsp':z_htgsp[cosim_start:cosim_stop],
+        'zone_clgsp':z_clgsp[cosim_start:cosim_stop],
+        'in_clg':in_clg[cosim_start:cosim_stop]
+        })
+    # print(result)
+    # print(baseline_df)
+    if sim_baseline == True:
+        result.to_csv(baseline_csv)
+    else:
+        result['building_diff'] = result['building'] - baseline_df['building']
+        result['cooling1_diff'] = result['cooling1'] - baseline_df['cooling1']
+        result['cooling2_diff'] = result['cooling2'] - baseline_df['cooling2']
+        result['zone_temp_diff'] = result['zone_temp'] - baseline_df['zone_temp']
+        
+        result.to_csv(output_csv)
+
+        if with_plots == True:
+            result['datetime'] =  pd.to_datetime(result['datetime'],
+                format='%m/%d/%Y %H:%M').apply(lambda x: x.hour)
+            result['cooling1_diff'] = result['cooling1_diff'] / 1000 * -1
+            result['building_diff'] = result['building_diff'] / 1000 * -1
+
+            #result = result[1:22]
+
+            result.plot(y='cooling1_diff', x='datetime', kind='bar', 
+                title='Cooling Energy Saving in KWh')
+            result.plot(y='building_diff', x='datetime', kind='bar', 
+                title='Building Energy Saving in KWh')
+            plt.show()
+            
 
 def run_mod_prediction(handyfilesvars, trace, mod, dat, n_samples, inds):
     # Initialize variable inputs and outputs for the given model type
@@ -1113,6 +1329,7 @@ def plot_updating(handyfilesvars, param, traces, mod):
     fig.savefig(fig_path)
 
 
+
 if __name__ == '__main__':
     # Handle optional user-specified execution arguments
     parser = ArgumentParser()
@@ -1124,6 +1341,8 @@ if __name__ == '__main__':
                         help="Re-estimate a model")
     parser.add_argument("--mod_assess", action="store_true",
                         help="Assess a model")
+    parser.add_argument("--mod_cosimulate", action="store_true",
+                        help="Cosimulate with EnergyPl")
     # Required flags for building type and size
     parser.add_argument("--bldg_type", required=True, type=str,
                         choices=["mediumofficenew", "mediumofficeold",
