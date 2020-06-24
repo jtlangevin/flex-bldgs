@@ -18,7 +18,7 @@ from pyfmi import load_fmu
 import pandas as pd
 import random as random
 import os as os
-from datetime import date
+from datetime import date,datetime, time, timedelta
 import datetime as dt
 
 tt.config.compute_value = "ignore"
@@ -1031,7 +1031,8 @@ def rank_strategies(handyfilesvars, bldg_type_vint, sf):
     # (Order: economic benefit, temperature, temperature precool, lighting,
     # OAF pct delta, plug load pct delta, intercept)
     betas_choice = np.array([
-        0.000345, -0.491951, 0.127805, -1.246971, 0.144217, -2.651832])
+    #    0.000345, -0.491951, 0.127805, -1.246971, 0.144217, -2.651832])
+        0.025, 0.14, -0.31, 0.05, -1.4, 0.26])
     #betas_choice_c1
     #betas_choice_c2
 
@@ -1163,31 +1164,28 @@ def simBaseline(cz, baseline_csv, fmu_path):
 
    
     sch_ven = [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0]
-    #sch_ven = [0 for i in range(24)]
     sch_htg = [15.6,15.6,15.6,15.6,15.6,21,21,21,21,21,21,21,21,21,21,21,21,15.6,15.6,15.6,15.6,15.6,15.6,15.6]
     sch_clg = [24 for i in range(24)]
     sch_lgt = [0.05,0.05,0.05,0.05,0.1,0.3,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9, 0.5, 0.3,0.3,0.2,0.2,0.1,0.05,0.05]
     sch_plg = [0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.9,0.9,0.9,0.9,0.8,0.9,0.9,0.9,0.9,0.5,0.4,0.4,0.4,0.4,0.4,0.4,0.4]
-
-    in_ven[0] = sch_ven[0]
-    #in_htg[0] = sch_htg[0]
-    in_clg[0] = sch_clg[0]
-    in_lgt[0] = sch_lgt[0]
-    in_plg[0] = sch_plg[0]
 
     hrs_since_dr_start = np.empty(n_steps)
     hrs_since_dr_end = np.empty(n_steps)
 
     i = 0
     # Main simulation loop
-    while i < n_steps:
-        # Set the input value to the FMU
-        # model.set(['InMELsSch','InLightSch','InCoolingSch', 'InVentSch'], \
-        #     [in_plg[i],in_lgt[i],in_clg[i], in_ven[i]])
-        model.set(['InMELsSch','InLightSch','InCoolingSch', 'InVentSch'], \
-            [in_plg[i],in_lgt[i],in_clg[i], in_ven[i]])
+    while True:
 
-         # Do one step of simulation
+        hour = int((t[i]/3600)%24)
+        in_clg[i] = sch_clg[hour]
+        in_lgt[i] = sch_lgt[hour]
+        in_plg[i] = sch_plg[hour]
+        in_ven[i] = sch_ven[hour]
+
+        ###############################################################
+        model.set(['InMELsSch','InLightSch','InCoolingSch', 'InVentSch'], \
+            [in_plg[i],in_lgt[i],in_clg[i],in_ven[i]])
+
         model.do_step(current_t = t[i], step_size=hStep, new_step=True)
 
         # Get the outputs of the simulation
@@ -1225,18 +1223,9 @@ def simBaseline(cz, baseline_csv, fmu_path):
         outdoor_drybulb[i] = (model.get('OutDrybulb') * 9 / 5) + 32 #farenheit
         outdoor_rh[i] = model.get('OutRH')
 
-        hour = int((t[i]/3600)%24)
-
-        next_hour = (hour+1)%24
-        
-        in_lgt[i+1] = sch_lgt[next_hour]
-        in_plg[i+1] = sch_plg[next_hour]
-        in_clg[i+1] = sch_clg[next_hour]
-        #in_htg[i+1] = sch_htg[next_hour]
-        in_ven[i+1] = sch_ven[next_hour]
-
         i += 1
-
+        if (i == n_steps):
+            break
 
     hrtime = pd.date_range(start=dt_jan1, periods=8760, freq='60min').values
     result = pd.DataFrame(data={'datetime':hrtime,
@@ -1267,11 +1256,10 @@ def simBaseline(cz, baseline_csv, fmu_path):
 def cosimulate(handyfilesvars, bldg_type_vint, sf):    
     # get the data of the choice strategy and store to respected schedule values
     climate_zones = ['2A','2B','3A','3B','3C','4A','4B','4C','5A','5B','6A','6B','7A']
-    #for cz in climate_zones:
     cz = '3A'
     
-    #fmu_path = 'fmu_files/Baseline_MediumOfficeDetailed_2004_' + cz + '.fmu'  
-    fmu_path = 'fmu_files/MO3A_nightcycle.fmu'
+    fmu_path = 'fmu_files/Baseline_MediumOfficeDetailed_2004_' + cz + '.fmu'  
+    #fmu_path = 'fmu_files/MO3A_nightcycle.fmu'
     all_csv = 'cosim_outputs/all_' + cz + '.csv'
     update_csv = 'cosim_outputs/update_' + cz + '.csv'
     predict_csv = 'data/test_predict.csv'
@@ -1295,16 +1283,16 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
             "4A":[12,15],"4B":[17,20],"4C":[17,20],"5A":[20,23],"5B":[17,20],
             "6A":[16,19],"6B":[17,20],"7A":[16,19]}
 
-        # dts_dr_start = [datetime.combine(x, time(time(dr_dict[cz][0]))) for x in dts_cosim]
-        # dts_dr_end = [datetime.combine(x, time(time(dr_dict[cz][1]))) for x in dts_cosim]
+        dts_dr_start = [datetime.combine(x, time(time(dr_dict[cz][0]))) for x in dts_cosim]
+        dts_dr_end = [datetime.combine(x, time(time(dr_dict[cz][1]))) for x in dts_cosim]
 
-        dts_dr_start = [datetime.combine(x, time(12)) for x in dts_cosim]
-        dts_dr_end = [datetime.combine(x, time(16)) for x in dts_cosim]
+        # dts_dr_start = [datetime.combine(x, time(12)) for x in dts_cosim]
+        # dts_dr_end = [datetime.combine(x, time(16)) for x in dts_cosim]
 
-        hrs_cosim_start = [int((x - dt_jan1).total_seconds() / 3600) for x in dts_cosim]
+        hrs_cosim_start = [int((x - dt_jan1).total_seconds() / 3600) - 1 for x in dts_cosim]
         hrs_cosim_end =  [(24 + x) for x in hrs_cosim_start]
-        hrs_dr_start = [int((x - dt_jan1).total_seconds() / 3600) for x in dts_dr_start]
-        hrs_dr_end = [int((x - dt_jan1).total_seconds() / 3600) for x in dts_dr_end]
+        hrs_dr_start = [int((x - dt_jan1).total_seconds() / 3600) - 1 for x in dts_dr_start]
+        hrs_dr_end = [int((x - dt_jan1).total_seconds() / 3600) - 1 for x in dts_dr_end]
 
         
         sim_days=365
@@ -1340,24 +1328,17 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
         z_clg2 = np.empty(n_steps)
 
         #in_htg = np.empty(n_steps+1)
-        in_clg = np.empty(n_steps+1)
-        in_plg = np.empty(n_steps+1)
-        in_lgt = np.empty(n_steps+1)
-        in_ven = np.empty(n_steps+1)
+        in_clg = np.empty(n_steps)
+        in_plg = np.empty(n_steps)
+        in_lgt = np.empty(n_steps)
+        in_ven = np.empty(n_steps)
 
        
         sch_ven = [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0]
-        #sch_ven = [0 for i in range(24)]
         sch_htg = [15.6,15.6,15.6,15.6,15.6,21,21,21,21,21,21,21,21,21,21,21,21,15.6,15.6,15.6,15.6,15.6,15.6,15.6]
         sch_clg = [24 for i in range(24)]
         sch_lgt = [0.05,0.05,0.05,0.05,0.1,0.3,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9, 0.5, 0.3,0.3,0.2,0.2,0.1,0.05,0.05]
         sch_plg = [0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.9,0.9,0.9,0.9,0.8,0.9,0.9,0.9,0.9,0.5,0.4,0.4,0.4,0.4,0.4,0.4,0.4]
-
-        in_ven[0] = sch_ven[0]
-        #in_htg[0] = sch_htg[0]
-        in_clg[0] = sch_clg[0]
-        in_lgt[0] = sch_lgt[0]
-        in_plg[0] = sch_plg[0]
 
         hrs_since_dr_start = np.empty(n_steps)
         hrs_since_dr_end = np.empty(n_steps)
@@ -1477,19 +1458,147 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
             else:
                 update_res.to_csv(update_csv, index=False)
 
+        def cosim_all(dt_cosim_index):
+            out_dt_cosim_start = dts_cosim[dt_cosim_index]
+            out_hr_cosim_start = hrs_cosim_start[dt_cosim_index]
+            out_hr_cosim_end = hrs_cosim_end[dt_cosim_index]
+
+
+            hrtime = pd.date_range(start=out_dt_cosim_start, periods=24, freq='60min').values
+            #dt_range = (hrs_dr_start[dt_id]+1):(hrs_dr_end[dt_id]+3)
+            all_res = pd.DataFrame(data={'datetime':hrtime,
+                'ID':21,
+                'Vintages':'2004',
+                'Day.type':1,
+                'Day.number':1,
+                'Hour.number':i,
+                'Climate.zone':cz,
+                'Demand.Power.sf.':z_blg[out_hr_cosim_start:out_hr_cosim_end],
+                'Indoor.Temp.F.':z_temp[out_hr_cosim_start:out_hr_cosim_end],
+                'Indoor.Humid.':z_rh[out_hr_cosim_start:out_hr_cosim_end],
+                'Outdoor.Temp.F.':outdoor_drybulb[out_hr_cosim_start:out_hr_cosim_end],
+                'Outdoor.Humid.':outdoor_rh[out_hr_cosim_start:out_hr_cosim_end],
+                'Outdoor.Sky.Clearness.':outdoor_skyclr[out_hr_cosim_start:out_hr_cosim_end],
+                'Occ.Fraction.':z_ppl[out_hr_cosim_start:out_hr_cosim_end],
+                'Cooling.Setpoint.':in_clg[out_hr_cosim_start:out_hr_cosim_end],
+                'Lighting.Power.pct.':in_lgt[out_hr_cosim_start:out_hr_cosim_end],
+                'Ventilation.pct.':in_ven[out_hr_cosim_start:out_hr_cosim_end],
+                'MELs.pct.':in_plg[out_hr_cosim_start:out_hr_cosim_end],
+                'Since.DR.Started.':hrs_since_dr_start[out_hr_cosim_start:out_hr_cosim_end],
+                'Since.DR.Ended.':hrs_since_dr_end[out_hr_cosim_start:out_hr_cosim_end],
+                'Since.Pre.cooling.Ended.':0,
+                'Since.Pre.cooling.Started.':0,
+                'Cooling.Setpoint.Diff.One.Step.':0,
+                'Lighting.Power.Diff.pct.One.Step.':0,
+                'MELs.Power.Diff.pct.One.Step.':0,
+                'Ventilation.Diff.pct.One.Step.':0,
+                'Pre.cooling.Temp.Increase.':0,
+                'Pre.cooling.Duration.':0,
+                'Tzonei':z_tempi[out_hr_cosim_start:out_hr_cosim_end]
+            })
+
+            baseline_df = pd.read_csv(baseline_csv, parse_dates=True, index_col='datetime')
+            all_res = all_res.set_index('datetime')
+
+            all_res['Demand.Power.Diff.sf.'] = (all_res['Demand.Power.sf.'] - baseline_df['Demand.Power.sf.']) * -1
+            all_res['Indoor.Temp.Diff.F.'] = all_res['Indoor.Temp.F.'] - baseline_df['Indoor.Temp.F.']
+            all_res['Indoor.Humid.Diff.'] = all_res['Indoor.Humid.'] - baseline_df['Indoor.Humid.']
+            all_res['Cooling.Setpoint.Diff.'] = (all_res['Cooling.Setpoint.'] - baseline_df['Cooling.Setpoint.'])
+            all_res['Lighting.Power.Diff.pct.'] = (all_res['Lighting.Power.pct.'] - baseline_df['Lighting.Power.pct.'])
+            all_res['MELs.Diff.pct.'] = (all_res['MELs.pct.'] - baseline_df['MELs.pct.']) * -1
+
+            all_res.reset_index(inplace=True)
+
+            if os.path.exists(all_csv):
+                all_res.to_csv(all_csv, mode='a', header=False, index=False)
+            else:
+                all_res.to_csv(all_csv, index=False) 
         i = 0
         dt_cosim_i = 0
-        # Main simulation loop
-        while i < n_steps:
+        
+        while True:
 
-            # Set the input value to the FMU
+            hour = int((t[i]/3600)%24)
+
+            ###############################################################
+
+            if i >= hrs_cosim_start[dt_cosim_i] and i <= hrs_cosim_end[dt_cosim_i]:
+
+                if i == hrs_cosim_start[dt_cosim_i]:
+                    # rank strategies and getting recommended strategy at hour 0 day-ahead
+                    print("RECOMMENDED STRATEGY... [", end="", flush=True)
+                    rank_strategies(handyfilesvars, bldg_type_vint, sf)
+
+                    recommendations = ('data','recommendations.json')
+                    with open(path.join(base_dir, *recommendations), 'r') as pred:
+                        predictions = json.load(pred)["predictions"]
+
+                    max_value = max(predictions.values())
+                    for key, value in predictions.items():
+                        if (value == max_value):
+                            strategy_name = key
+                    print(strategy_name + "] is selected, and schedule storing is... ", end="", flush=True)
+                    all_strategy_data = ModelDataLoad(
+                            handyfilesvars, opts.mod_init, opts.mod_assess,
+                            opts.mod_est, update=None, ndays_update=None)
+
+                    strategy_dat = all_strategy_data.dmd_tmp[np.where(all_strategy_data.dmd_tmp['Name'] == strategy_name)]
+
+                    mag_pc = strategy_dat['pc_tmp_inc'][0]
+                    dur_pc = strategy_dat['pc_length'][0]
+                    delt_clg = strategy_dat['tsp_delt'][0] #np.append(dat['tsp_delt'], np.zeros(14))
+                    pct_lgt = strategy_dat['lt_pwr_delt_pct'][0] #np.append(dat['lt_pwr_delt_pct'], np.zeros(14))
+                    pct_plg = strategy_dat['mels_delt_pct'][0] #np.append(dat['mels_delt_pct'], np.zeros(14))
+                    pct_ven = strategy_dat['ven_delt_pct'][0]
+
+                if i > (hrs_dr_start[dt_cosim_i] - dur_pc) and i <= (hrs_dr_end[dt_cosim_i]):
+
+                    if i <= hrs_dr_start[dt_cosim_i]: 
+                        # useful for pre-cooling
+                        in_clg[i] = sch_clg[hour] - mag_pc
+                    else:
+                        in_clg[i] = sch_clg[hour] + delt_clg
+                        in_lgt[i] = sch_lgt[hour] * (1 - pct_lgt)
+                        in_plg[i] = sch_plg[hour] * (1 - pct_plg)
+                        in_ven[i] = sch_ven[hour] * (1 - pct_ven)
+                        hrs_since_dr_start[i] = i - hrs_dr_start[dt_cosim_i]
+                        hrs_since_dr_end[i] = 0
+
+                        print('delt_clg {!s} dur_pc {!s} mag_pc {!s} pct_lgt {!s} pct_plg {!s} pct_ven {!s}'.
+                            format(delt_clg, dur_pc, mag_pc, pct_lgt, pct_plg, pct_ven))
+                        print('hour {!s} in_clg {!s} z_clgsp {!s} z_tempi {!s} in_lgt {!s} in_plg {!s} in_ven {!s}'.
+                            format(hour, in_clg[i], z_clgsp[i], z_tempi[i], in_lgt[i], in_plg[i], in_ven[i]))
+                else:
+                    in_clg[i] = sch_clg[hour]
+                    in_lgt[i] = sch_lgt[hour]
+                    in_plg[i] = sch_plg[hour]
+                    in_ven[i] = sch_ven[hour]
+                    hrs_since_dr_start[i] = 0
+                    if i > (hrs_dr_end[dt_cosim_i]) and i <= (hrs_dr_end[dt_cosim_i] + 2):
+                        hrs_since_dr_end[i] = i - hrs_dr_end[dt_cosim_i]
+                        if i == (hrs_dr_end[dt_cosim_i] + 2):
+                            cosim_all(dt_cosim_i)
+                            cosim_updatecsv(dt_cosim_i)
+                            cosim_predictcsv(dt_cosim_i)
+                            dt_cosim_i += 1
+                        if dt_cosim_i >= len(hrs_dr_start):
+                            dt_cosim_i -= 1
+                    else:
+                        hrs_since_dr_end[i] = 0
+
+            else:
+                in_clg[i] = sch_clg[hour]
+                in_lgt[i] = sch_lgt[hour]
+                in_plg[i] = sch_plg[hour]
+                in_ven[i] = sch_ven[hour]
+
+            ###############################################################
             model.set(['InMELsSch','InLightSch','InCoolingSch', 'InVentSch'], \
                 [in_plg[i],in_lgt[i],in_clg[i],in_ven[i]])
 
             model.do_step(current_t = t[i], step_size=hStep, new_step=True)
 
-
-            # Get the outputs of the simulation
+             # Get the outputs of the simulation
             temp_np = np.array([])
             ppl_np = np.array([])
             rh_np = np.array([])
@@ -1525,90 +1634,12 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
             outdoor_drybulb[i] = (model.get('OutDrybulb') * 9 / 5) + 32 #farenheit
             outdoor_rh[i] = model.get('OutRH')
 
-            hour = int((t[i]/3600)%24)
-            next_hour = (hour+1)%24
 
-
-            #########################################
-            
-            if i >= hrs_cosim_start[dt_cosim_i] and i <= hrs_cosim_end[dt_cosim_i]:
-                print(dt_cosim_i)
-                # print('dt_cosim_i {!s} hour {!s} hrs_cosim_start {!s} hrs_cosim_end {!s} hrs_dr_start {!s} hrs_dr_end {!s}'.
-                #     format(dt_cosim_i, hour, hrs_cosim_start[dt_cosim_i], hrs_cosim_end[dt_cosim_i], hrs_dr_start[dt_cosim_i], hrs_dr_end[dt_cosim_i]))
+            #print('Time {0}, z_temp {1}, z_tempi {2}'.format(t[i],z_temp[i],z_tempi[i]))
         
-                
-                if i == hrs_cosim_start[dt_cosim_i]:
-                    # rank strategies and getting recommended strategy at hour 0 day-ahead
-                    print("RECOMMENDED STRATEGY... [", end="", flush=True)
-                    rank_strategies(handyfilesvars, bldg_type_vint, sf)
-
-                    recommendations = ('data','recommendations.json')
-                    with open(path.join(base_dir, *recommendations), 'r') as pred:
-                        predictions = json.load(pred)["predictions"]
-
-                    max_value = max(predictions.values())
-                    for key, value in predictions.items():
-                        if (value == max_value):
-                            strategy_name = key
-                    print(strategy_name + "] is selected, and schedule storing is... ", end="", flush=True)
-                    all_strategy_data = ModelDataLoad(
-                            handyfilesvars, opts.mod_init, opts.mod_assess,
-                            opts.mod_est, update=None, ndays_update=None)
-
-                    strategy_dat = all_strategy_data.dmd_tmp[np.where(all_strategy_data.dmd_tmp['Name'] == strategy_name)]
-
-                    mag_pc = strategy_dat['pc_tmp_inc'][0]
-                    dur_pc = strategy_dat['pc_length'][0]
-                    delt_clg = strategy_dat['tsp_delt'][0] #np.append(dat['tsp_delt'], np.zeros(14))
-                    pct_lgt = strategy_dat['lt_pwr_delt_pct'][0] #np.append(dat['lt_pwr_delt_pct'], np.zeros(14))
-                    pct_plg = strategy_dat['mels_delt_pct'][0] #np.append(dat['mels_delt_pct'], np.zeros(14))
-                    pct_ven = strategy_dat['ven_delt_pct'][0]
-
-
-                if i > (hrs_dr_start[dt_cosim_i] - dur_pc) and i <= (hrs_dr_end[dt_cosim_i]):
-                    print('in Pre-Cool AND DR periods')
-                    # print('i {!s} dt_cosim_i {!s} hrs_dr_start {!s} hrs_dr_end {!s}'.
-                    #     format(i, dt_cosim_i, hrs_dr_start[dt_cosim_i],hrs_dr_end[dt_cosim_i]))
-
-                    if i <= hrs_dr_start[dt_cosim_i]:
-                        in_clg[i+1] = sch_clg[next_hour] - mag_pc
-                    else:
-                        in_clg[i+1] = sch_clg[next_hour] + delt_clg
-                        in_lgt[i+1] = sch_lgt[next_hour] * (1 - pct_lgt)
-                        in_plg[i+1] = sch_plg[next_hour] * (1 - pct_plg)
-                        in_ven[i+1] = sch_ven[next_hour] * (1 - pct_ven)
-                        hrs_since_dr_start[i] = i - hrs_dr_start[dt_cosim_i]
-                        hrs_since_dr_end[i] = 0
-
-                        print('delt_clg {!s} dur_pc {!s} mag_pc {!s} pct_lgt {!s} pct_plg {!s} pct_ven {!s}'.
-                            format(delt_clg, dur_pc, mag_pc, pct_lgt, pct_plg, pct_ven))
-                        print('hour {!s} in_clg {!s} z_clgsp {!s} z_tempi {!s} in_lgt {!s} in_plg {!s} in_ven {!s}'.
-                            format(hour, in_clg[i], z_clgsp[i], z_tempi[i], in_lgt[i], in_plg[i], in_ven[i]))
-                         # Do one step of simulation
-
-                else:
-                    in_clg[i+1] = sch_clg[next_hour]
-                    in_lgt[i+1] = sch_lgt[next_hour]
-                    in_plg[i+1] = sch_plg[next_hour]
-                    in_ven[i+1] = sch_ven[next_hour]
-                    hrs_since_dr_start[i] = 0
-                    if i > (hrs_dr_end[dt_cosim_i]) and i <= (hrs_dr_end[dt_cosim_i] + 2):
-                        hrs_since_dr_end[i] = i - hrs_dr_end[dt_cosim_i]
-                        if i == (hrs_dr_end[dt_cosim_i] + 2):
-                            #cosim_all(dt_cosim_i)
-                            cosim_updatecsv(dt_cosim_i)
-                            cosim_predictcsv(dt_cosim_i)
-                            dt_cosim_i += 1
-                        if dt_cosim_i >= len(hrs_dr_start):
-                            dt_cosim_i -= 1
-                    else:
-                        hrs_since_dr_end[i] = 0
-            else:
-                in_clg[i+1] = sch_clg[next_hour]
-                in_lgt[i+1] = sch_lgt[next_hour]
-                in_plg[i+1] = sch_plg[next_hour]
-                in_ven[i+1] = sch_ven[next_hour]
             i += 1
+            if (i == n_steps):
+                break
 
 
 def run_mod_prediction(handyfilesvars, trace, mod, dat, n_samples, inds):
