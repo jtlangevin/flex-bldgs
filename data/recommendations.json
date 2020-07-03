@@ -1,0 +1,21 @@
+{
+  "notes": "Percentage of simulations in which each candidate DR strategy is chosen for current event",
+  "units": "%",
+  "predictions": {
+    "Dimming - High": 0.0,
+    "Dimming - Low": 0.1,
+    "Dimming - Moderate": 0.4,
+    "GTA - High": 0.6,
+    "GTA - Low": 0.2,
+    "GTA - Moderate": 0.2,
+    "Package - High": 0.0,
+    "Package - Low": 0.1,
+    "Package - Moderate": 0.2,
+    "Plug Load Reduce - High": 0.0,
+    "Plug Load Reduce - Low": 0.0,
+    "Plug Load Reduce - Modera": 0.2,
+    "Pre-cool - High": 0.3,
+    "Pre-cool - Low": 8.8,
+    "Pre-cool - Mod": 88.9
+  }
+}
