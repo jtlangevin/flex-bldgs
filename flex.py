@@ -872,8 +872,8 @@ def main(base_dir):
         print("Cosimulation....")
         handyfilesvars = UsefulFilesVars(
             bldg_type_vint, opts.mod_init, opts.mod_est, opts.mod_assess)
+        #cosimulate(handyfilesvars, bldg_type_vint, sf)
         cosimulate(handyfilesvars, bldg_type_vint, sf)
-
         print("Complete.")
     else:
 
@@ -996,7 +996,7 @@ def main(base_dir):
                 base_dir, *handyfilesvars.predict_out), "w") as jso:
             json.dump(predict_out, jso, indent=2)
 
-def simBaseline(cz, baseline_csv, fmu_path, sf):
+def simBaseline(cz, baseline_csv, fmu_path, sf, sch_base, io_dict):
     """ This function is used to collect results from  baseline runs
     @params:
     cz - climate zone
@@ -1006,7 +1006,7 @@ def simBaseline(cz, baseline_csv, fmu_path, sf):
     """
 
     # starting date
-    dt_jan1 = datetime(2006, 1, 1)
+    dt_jan1 = datetime(2006, 1, 1, 1)
     # simulated number of days
     sim_days=365
     # starting simulated time
@@ -1023,85 +1023,22 @@ def simBaseline(cz, baseline_csv, fmu_path, sf):
     model = load_fmu(fmu_path, log_level=7)
     model.initialize(tStart, tStop)
 
-    # Below is a list of output variables to be fed into fmu
-    # E+ 'Site Outdoor Air Drybulb Temperature'
-    outdoor_drybulb = np.empty(n_steps)
-    # E+ 'Site Outdoor Air Relative Humidity'
-    outdoor_rh = np.empty(n_steps)
-    # E+ 'Site Daylighting Model Sky Clearness'
-    outdoor_skyclr = np.empty(n_steps)
-    # E+ sum of 'Site Exterior Horizontal Sky Illuminance'
-    #             'Site Exterior Horizontal Beam Illuminance'
-    outdoor_natlt = np.empty(n_steps)
-
-    # E+ aggregate of 'Daylighting Reference Point 1 Illuminance' 22 zones
-    z_illum = np.empty(n_steps)
-    # E+ aggregate of 'Zone Air Temperature' 35 occupied zones
-    z_temp = np.empty(n_steps)
-    # E+ 'Zone Air Temperature' of Top_1 zone
-    z_tempi = np.empty(n_steps)
-    # E+ Zone Air CO2 Concentration of Top_1 zone
-    z_cotwo = np.empty(n_steps)
-    # E+ aggregate of 'People Occupant Count' 35 occupied zones
-    z_ppl = np.empty(n_steps)
-    # E+ aggregate of 'Zone Air Relative Humidity' 35 occupied zones
-    z_rh = np.empty(n_steps)
-    # E+ 'Zone Thermal Comfort Fanger Model PMV' of Top_1 zone
-    z_pmv = np.empty(n_steps)
-    # E+ 'Zone Thermostat Heating Setpoint Temperature'
-    z_htgsp = np.empty(n_steps)
-    # E+ 'Zone Thermostat Cooling Setpoint Temperature'
-    z_clgsp = np.empty(n_steps)
-    # E+ 'Lights Electric Energy'
-    z_lgt = np.empty(n_steps)
-    # E+ 'Electric Equipment Electric Energy'
-    z_plg = np.empty(n_steps)
-    # E+ 'Facility Total Electric Demand Power'
-    z_blg = np.empty(n_steps)
-    # E+ 'Air System Total Cooling Energy' 23 Zone PVAV
-    z_clg1 = np.empty(n_steps)
-    # E+ 'Air System Total Cooling Energy' 21 Zone PVAV
-    z_clg2 = np.empty(n_steps)
-    # E+ input to 'OfficeMedium HTGSETP_SCH_PACU_VAV_bot'
-    # # in_htg = np.empty(n_steps+1)
-    # E+ input to 'OfficeMedium CLGSETP_SCH_NO_SETBACK'
-    in_clg = np.empty(n_steps+1)
-    # E+ input to 'OfficeMedium BLDG_EQUIP_SCH_2004'
-    in_plg = np.empty(n_steps+1)
-    # E+ input to 'OfficeMedium BLDG_LIGHT_SCH_2004'
-    in_lgt = np.empty(n_steps+1)
-    # E+ input to 'OfficeMedium MinOA_MotorizedDamper_Sched'
-    in_ven = np.empty(n_steps+1)
-
-    # default schedules from the E+ file for MediumOfficeDetailed Vintage 2004
-    # E+ input to 'OfficeMedium MinOA_MotorizedDamper_Sched'
-    sch_ven = [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0]
-    # E+ input to 'OfficeMedium HTGSETP_SCH_PACU_VAV_bot'
-    # # sch_htg = [15.6,15.6,15.6,15.6,15.6,21,21,21,21,21,21,21,21,21,21,21,21,15.6,15.6,15.6,15.6,15.6,15.6,15.6]
-    # E+ input to 'OfficeMedium CLGSETP_SCH_NO_SETBACK'
-    sch_clg = [24 for i in range(24)]
-    # E+ input to 'OfficeMedium BLDG_LIGHT_SCH_2004'
-    sch_lgt = [0.05,0.05,0.05,0.05,0.1,0.3,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.5,0.3,0.3,0.2,0.2,0.1,0.05,0.05]
-    # E+ input to 'OfficeMedium BLDG_EQUIP_SCH_2004'
-    sch_plg = [0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.9,0.9,0.9,0.9,0.8,0.9,0.9,0.9,0.9,0.5,0.4,0.4,0.4,0.4,0.4,0.4,0.4]
-    # numpy array to keep track hours since DR start
-    hrs_since_dr_start = np.empty(n_steps)
-    # numpy array to keep track hours since DR end
-    hrs_since_dr_end = np.empty(n_steps)
+    io_vals = np.empty(shape=(len(io_dict), n_steps))
 
     i = 0
     # Main simulation loop
     while True:
 
         hour = int((t[i]/3600)%24)
-        in_clg[i] = sch_clg[hour]
-        in_lgt[i] = sch_lgt[hour]
-        in_plg[i] = sch_plg[hour]
-        in_ven[i] = sch_ven[hour]
+        io_vals[io_dict['inven']][i] = sch_base[0][hour]
+        io_vals[io_dict['inclg']][i] = sch_base[2][hour]
+        io_vals[io_dict['inlgt']][i] = sch_base[3][hour]
+        io_vals[io_dict['inplg']][i] = sch_base[4][hour]
 
         ###############################################################
-        model.set(['InMELsSch', 'InLightSch', 'InCoolingSch', 'InVentSch'],
-                  [in_plg[i], in_lgt[i], in_clg[i], in_ven[i]])
+        model.set(['InMELsSch','InLightSch','InCoolingSch', 'InVentSch'],
+                  [io_vals[io_dict['inplg']][i],io_vals[io_dict['inlgt']][i],
+                   io_vals[io_dict['inclg']][i],io_vals[io_dict['inven']][i]])
 
         model.do_step(current_t = t[i], step_size=hStep, new_step=True)
 
@@ -1125,59 +1062,48 @@ def simBaseline(cz, baseline_csv, fmu_path, sf):
         illum_wght = np.mean(illum_np)
         temp_wght = np.mean(temp_np)
         ppl_wght = np.mean(ppl_np)
-        z_illum[i] = illum_wght
-        z_temp[i] = (temp_wght * 9 / 5) + 32  # farenheit
-        z_tempi[i] = (model.get('ZAT_31') * 9 / 5) + 32
-        z_ppl[i] = ppl_wght
-        z_rh[i] = rh_wght
-        z_cotwo[i] = model.get('ZoneCOTwo')
-        z_pmv[i] = model.get('ZonePMV')
-        z_htgsp[i] = model.get('ZoneHTGsp')
-        z_clgsp[i] = model.get('ZoneCLGsp')
-        z_lgt[i] = model.get('LightsEnergy') / 3600000  # kilowatt-hour
-        z_plg[i] = model.get('MelsEnergy') / 3600000
-        z_blg[i] = model.get('BldgPwr') / 1000
-        z_clg1[i] = model.get('CoolingEnergy1') / 3600000
-        z_clg2[i] = model.get('CoolingEnergy2') / 3600000
-        outdoor_skyclr[i] = model.get('OutSkyClear')
-        outdoor_drybulb[i] = (model.get('OutDrybulb') * 9 / 5) + 32  # farenheit
-        outdoor_rh[i] = model.get('OutRH')
-        outdoor_natlt[i] = model.get('OutSkyIllum') + model.get('OutBeamIllum')
+        io_vals[io_dict['zlux']][i] = illum_wght
+
+        io_vals[io_dict['zat']][i] = (temp_wght * 9 / 5) + 32 #farenheit
+        io_vals[io_dict['zati']][i] = (model.get('ZAT_31') * 9 / 5) + 32
+        io_vals[io_dict['zpp']][i] = ppl_wght
+        io_vals[io_dict['zrh']][i] = rh_wght
+
+        io_vals[io_dict['zcot']][i] = model.get('ZoneCOTwo')
+        io_vals[io_dict['zpmv']][i] = model.get('ZonePMV')
+        io_vals[io_dict['zlgt']][i] = model.get('LightsEnergy') / 3600000 # kilowatt-hour
+        io_vals[io_dict['zplg']][i] = model.get('MelsEnergy') / 3600000
+        io_vals[io_dict['pwr']][i] = model.get('BldgPwr') / 1000
+
+        io_vals[io_dict['osk']][i] = model.get('OutSkyClear')
+        io_vals[io_dict['oat']][i] = (model.get('OutDrybulb') * 9 / 5) + 32 #farenheit
+        io_vals[io_dict['orh']][i] = model.get('OutRH')
+
+        # z_clg1[i] = model.get('CoolingEnergy1') / 3600000
+        # z_clg2[i] = model.get('CoolingEnergy2') / 3600000
+        # outdoor_natlt[i] = model.get('OutSkyIllum') + model.get('OutBeamIllum')
 
         i += 1
         if (i == n_steps):
             break
 
+    #epout_df = pd.read_csv(path.join(ep_dir,bldg_file + '.csv'), parse_dates=True)
     hrtime = pd.date_range(start=dt_jan1, periods=8760, freq='60min').values
-    result = pd.DataFrame(data={
-        'datetime': hrtime,
-        'ID': 21,
-        'Vintages': '2004',
-        'Day.type': 1,
-        'Day.number': [(int(x / 24) + 1) for x in range(0,8760)],
-        'Hour.number': range(0,8760),
-        'Climate.zone': cz,
-        'Demand.Power.sf.': z_blg[0:8760] / sf,
-        'Indoor.Temp.F.': z_temp[0:8760],
-        'Indoor.Humid.': z_rh[0:8760],
-        'Outdoor.Temp.F.': outdoor_drybulb[0:8760],
-        'Outdoor.Humid.': outdoor_rh[0:8760],
-        'Outdoor.Sky.Clearness.': outdoor_skyclr[0:8760],
-        'Occ.Fraction.': z_ppl[0:8760],
-        'Cooling.Setpoint.': in_clg[0:8760],
-        'Lighting.Power.pct.': in_lgt[0:8760],
-        'Ventilation.pct.': in_ven[0:8760],
-        'MELs.pct.': in_plg[0:8760],
-        'Tzonei': z_tempi[0:8760],
-        'Outdoor.Nat.Lt.': outdoor_natlt[0:8760],
-        'Nat.Lt.': z_illum[0:8760]
-
+    result = pd.DataFrame(data={'datetime':hrtime,'ID':21,'Vintages':'2004',
+        'Day.type':1,'Day.number':1,'Hour.number':0,'Climate.zone':cz,
+        'Demand.Power.sf.':io_vals[io_dict['pwr']],'Indoor.Temp.F.':io_vals[io_dict['zat']],
+        'Tzonei':io_vals[io_dict['zati']],'Nat.Lt.':io_vals[io_dict['zlux']],
+        'Indoor.Humid.':io_vals[io_dict['zrh']],'Outdoor.Temp.F.':io_vals[io_dict['oat']],
+        'Outdoor.Humid.':io_vals[io_dict['orh']],'Outdoor.Sky.Clearness.':io_vals[io_dict['osk']],
+        'Occ.Fraction.':io_vals[io_dict['zpp']],
+        'Cooling.Setpoint.':io_vals[io_dict['inclg']],'Lighting.Power.pct.':io_vals[io_dict['inlgt']],
+        'Ventilation.pct.':io_vals[io_dict['inven']],'MELs.pct.':io_vals[io_dict['inplg']]
     })
 
     result.to_csv(baseline_csv, index=False)
 
 def updateTestPredictCSV(handyfilesvars, baseline_csv, hr_dr_start, hr_dr_end, hrs_rbnd):
-   
+
     base_df = pd.read_csv(baseline_csv, parse_dates=True)
     predict_csv = path.join(*handyfilesvars.mod_dict["temperature"]["io_data"][0])
     predict_df = pd.read_csv(predict_csv).head(19)
@@ -1222,6 +1148,81 @@ def updateTestPredictCSV(handyfilesvars, baseline_csv, hr_dr_start, hr_dr_end, h
         predict_df = predict_df.append(temp_df)
 
     predict_df.to_csv(predict_csv, index=False)
+
+def updateTestUpdateCSV(cz, baseline_csv, update_csv, day_i, dt_cosim_i, io_dict, io_vals, dts_dr_start, dts_dr_end, hrs_dr_start, hrs_dr_end, hrs_rbnd):
+    # the file with Na's data at the initial, cleared, and repopulated from 
+    # Energyplus output at each DR event (per-day) and 2-hour rebound period.
+    # Run, for example, every 5 events and re-initialized with new data.
+    out_dt_dr_start = (dts_dr_start[dt_cosim_i] + timedelta(hours=1))
+    out_dt_dr_end = (dts_dr_end[dt_cosim_i] + timedelta(hours=2))
+    out_hr_dr_start = hrs_dr_start[dt_cosim_i] + 1
+    out_hr_dr_end = hrs_dr_end[dt_cosim_i] + 1 + hrs_rbnd
+
+    # print('TIME')
+    # print('dt_cosim_index {!s} out_dt_dr_start {!s} out_dt_dr_end {!s} out_hr_dr_start {!s} out_hr_dr_end {!s}'.
+    #     format(dt_cosim_index, out_dt_dr_start, out_dt_dr_end, out_hr_dr_start, out_hr_dr_end))
+    
+    #hrtime = pd.date_range(start=out_dt_dr_start, end=out_dt_dr_end, freq='60min').values
+    hrtime = pd.date_range(start=out_dt_dr_start, end=out_dt_dr_end, freq='H').to_pydatetime()
+    dr_r = np.s_[out_hr_dr_start:out_hr_dr_end]
+    update_res = pd.DataFrame(data={'datetime':hrtime,
+        'ID': 21,
+        'Vintages': '2004',
+        'Day.type': 1,
+        'Day.number': day_i,
+        'Hour.number': [x.hour for x in hrtime],
+        'Climate.zone': cz,
+        'Demand.Power.sf.': io_vals[io_dict['pwr']][dr_r],
+        'Indoor.Temp.F.': io_vals[io_dict['zat']][dr_r],
+        'Indoor.Humid.': io_vals[io_dict['zrh']][dr_r],
+        'Outdoor.Temp.F.': io_vals[io_dict['oat']][dr_r],
+        'Outdoor.Humid.': io_vals[io_dict['orh']][dr_r],
+        'Outdoor.Sky.Clearness.': io_vals[io_dict['osk']][dr_r],
+        'Occ.Fraction.': io_vals[io_dict['zpp']][dr_r],
+        'Cooling.Setpoint.': io_vals[io_dict['inclg']][dr_r],
+        'Lighting.Power.pct.': io_vals[io_dict['inlgt']][dr_r],
+        'Ventilation.pct.': io_vals[io_dict['inven']][dr_r],
+        'MELs.pct.': io_vals[io_dict['inplg']][dr_r],
+        'Since.DR.Started.': io_vals[io_dict['hdrst']][dr_r],
+        'Since.DR.Ended.': io_vals[io_dict['hdren']][dr_r],
+        'Since.Pre.cooling.Ended.': 0,
+        'Since.Pre.cooling.Started.': 0,
+        'Cooling.Setpoint.Diff.One.Step.': io_vals[io_dict['inclg_delt']][dr_r],
+        'Lighting.Power.Diff.pct.One.Step.': io_vals[io_dict['inlgt_delt']][dr_r],
+        'MELs.Power.Diff.pct.One.Step.': io_vals[io_dict['inplg_delt']][dr_r],
+        'Ventilation.Diff.pct.One.Step.': io_vals[io_dict['inven_delt']][dr_r],
+        'Pre.cooling.Temp.Increase.': 0,
+        'Pre.cooling.Duration.': 0
+    })
+
+    baseline_df = pd.read_csv(baseline_csv, parse_dates=True, index_col='datetime')
+    update_res = update_res.set_index('datetime')
+
+    update_res['Demand.Power.Diff.sf.'] = (update_res['Demand.Power.sf.'] - baseline_df['Demand.Power.sf.']) * -1
+    update_res['Indoor.Temp.Diff.F.'] = update_res['Indoor.Temp.F.'] - baseline_df['Indoor.Temp.F.']
+    update_res['Indoor.Humid.Diff.'] = update_res['Indoor.Humid.'] - baseline_df['Indoor.Humid.']
+    update_res['Cooling.Setpoint.Diff.'] = (update_res['Cooling.Setpoint.'] - baseline_df['Cooling.Setpoint.'])
+    update_res['Lighting.Power.Diff.pct.'] = (update_res['Lighting.Power.pct.'] - baseline_df['Lighting.Power.pct.'])
+    update_res['Ventilation.Diff.pct.'] = (update_res['Ventilation.pct.'] - baseline_df['Ventilation.pct.'])
+    update_res['MELs.Diff.pct.'] = (update_res['MELs.pct.'] - baseline_df['MELs.pct.']) * -1
+
+    update_res.reset_index(inplace=True)
+    update_res = update_res[[
+        'ID','Vintages','Day.type','Day.number','Hour.number',
+        'Climate.zone','Demand.Power.Diff.sf.','Indoor.Temp.Diff.F.',
+        'Indoor.Humid.Diff.','Outdoor.Temp.F.','Outdoor.Humid.',
+        'Outdoor.Sky.Clearness.','Occ.Fraction.','Cooling.Setpoint.Diff.',
+        'Lighting.Power.Diff.pct.','Ventilation.Diff.pct.',
+        'MELs.Diff.pct.','Since.DR.Started.','Since.DR.Ended.',
+        'Since.Pre.cooling.Ended.','Since.Pre.cooling.Started.',
+        'Cooling.Setpoint.Diff.One.Step.','Lighting.Power.Diff.pct.One.Step.',
+        'MELs.Power.Diff.pct.One.Step.','Ventilation.Diff.pct.One.Step.',
+        'Pre.cooling.Temp.Increase.','Pre.cooling.Duration.']]
+
+    if os.path.exists(update_csv):
+        update_res.to_csv(update_csv, mode='a', header=False, index=False)
+    else:
+        update_res.to_csv(update_csv, index=False)
 
 def rank_strategies(handyfilesvars, bldg_type_vint, sf):
     print("Loading input data...")
@@ -1345,17 +1346,132 @@ def rank_strategies(handyfilesvars, bldg_type_vint, sf):
             base_dir, *handyfilesvars.predict_out), "w") as jso:
         json.dump(predict_out, jso, indent=2)
 
+def cosimulate_test(handyfilesvars, bldg_type_vint, sf):
+    cz = '3A'
+    
+    ep_dir = 'Output_EPExport_Slave'
+    fmu_dir = 'fmu_files'
+    cosim_dir = 'cosim_outputs'
+    data_dir = 'data'
+
+    bldg_file = 'Baseline_MediumOfficeDetailed_2004_' + cz
+
+    fmu_path = path.join(fmu_dir, bldg_file + '.fmu')
+
+    #predict_csv = path.join(data_dir + 'test_predict.csv')
+    update_csv = path.join(data_dir + 'test_update.csv')
+    baseline_csv = path.join(cosim_dir, bldg_file + '.csv')
+
+    
+    dt_jan1 = datetime(2006, 1, 1,1)
+    sim_days=365
+    tStart = 0
+    tStop = 3600*1*24*sim_days   ## change the timestep in EPlus to 1
+    hStep = 3600 # 60 mins
+
+    t = np.arange(tStart, tStop, hStep)
+    n_steps = len(t)
+     
+    model = load_fmu(fmu_path, log_level=7)
+    model.initialize(tStart,tStop)    
+
+
+    io_dict = {'oat':0,'orh':1,'osk':2,'pwr':3,'zat':4,'zati':5,'zcot':6,
+               'zpp':7,'zrh':8,'zpmv':9,'zlgt':10,
+               'zplg':11,'inclg':12,'inplg':13,'inlgt':14,'inven':15}
+
+    io_vals = np.empty(shape=(len(io_dict),n_steps))
+
+
+    sch_base = np.array([
+        (0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0), # ventilation
+        (15.6,15.6,15.6,15.6,15.6,21,21,21,21,21,21,21,21,21,21,21,21,15.6,15.6,15.6,15.6,15.6,15.6,15.6), # heating
+        (24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24), # cooling
+        (0.05,0.05,0.05,0.05,0.1,0.3,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9, 0.5, 0.3,0.3,0.2,0.2,0.1,0.05,0.05), # lighting
+        (0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.9,0.9,0.9,0.9,0.8,0.9,0.9,0.9,0.9,0.5,0.4,0.4,0.4,0.4,0.4,0.4,0.4)]) # plugloads
+    i = 0
+    # Main simulation loop
+    while True:
+
+        hour = int((t[i]/3600)%24)
+        io_vals[io_dict['inven']][i] = sch_base[0][hour]
+        io_vals[io_dict['inclg']][i] = sch_base[2][hour]
+        io_vals[io_dict['inlgt']][i] = sch_base[3][hour]
+        io_vals[io_dict['inplg']][i] = sch_base[4][hour]
+        
+        ###############################################################
+        model.set(['InMELsSch','InLightSch','InCoolingSch', 'InVentSch'], \
+            [io_vals[io_dict['inplg']][i],io_vals[io_dict['inlgt']][i],io_vals[io_dict['inclg']][i],io_vals[io_dict['inven']][i]])
+
+        model.do_step(current_t = t[i], step_size=hStep, new_step=True)
+
+        # Get the outputs of the simulation
+        temp_np = np.array([])
+        ppl_np = np.array([])
+        rh_np = np.array([])
+        for zoneid in range(0,34):
+            temp_np = np.append(temp_np, (model.get('ZAT_' + str(zoneid))))
+            ppl_np = np.append(ppl_np, (model.get('PEOPLE_' + str(zoneid))))
+            rh_np = np.append(rh_np, (model.get('ZRH_' + str(zoneid))))
+
+
+        #temp_wght = np.sum((temp_np * ppl_np)) / np.sum(ppl_np)
+        # ppl_wght = (np.sum(ppl_np * ppl_np) / np.sum(ppl_np)) / np.sum(ppl_np)
+        rh_wght = np.sum((rh_np * ppl_np)) / np.sum(ppl_np)
+        temp_wght = np.mean(temp_np)
+        ppl_wght = np.mean(ppl_np)
+
+
+
+        io_vals[io_dict['zat']][i] = (temp_wght * 9 / 5) + 32 #farenheit
+        io_vals[io_dict['zati']][i] = (model.get('ZAT_31') * 9 / 5) + 32
+        io_vals[io_dict['zpp']][i] = ppl_wght
+        io_vals[io_dict['zrh']][i] = rh_wght
+
+        io_vals[io_dict['zcot']][i] = model.get('ZoneCOTwo')
+        io_vals[io_dict['zpmv']][i] = model.get('ZonePMV')
+        io_vals[io_dict['zlgt']][i] = model.get('LightsEnergy') / 3600000 # kilowatt-hour
+        io_vals[io_dict['zplg']][i] = model.get('MelsEnergy') / 3600000
+        io_vals[io_dict['pwr']][i] = model.get('BldgPwr') / 1000
+
+        io_vals[io_dict['osk']][i] = model.get('OutSkyClear')
+        io_vals[io_dict['oat']][i] = (model.get('OutDrybulb') * 9 / 5) + 32 #farenheit
+        io_vals[io_dict['orh']][i] = model.get('OutRH')
+
+        i += 1
+        if (i == n_steps):
+            break
+
+    #epout_df = pd.read_csv(path.join(ep_dir,bldg_file + '.csv'), parse_dates=True)
+    hrtime = pd.date_range(start=dt_jan1, periods=8760, freq='60min').values
+    result = pd.DataFrame(data={'datetime':hrtime,'ID':21,'Vintages':'2004',
+        'Day.type':1,'Day.number':1,'Hour.number':0,'Climate.zone':cz,
+        'Demand.Power.sf.':io_vals[io_dict['pwr']],'Indoor.Temp.F.':io_vals[io_dict['zat']],'Indoor.Humid.':io_vals[io_dict['zrh']],
+        'Outdoor.Temp.F.':io_vals[io_dict['oat']],'Outdoor.Humid.':io_vals[io_dict['orh']],
+        'Outdoor.Sky.Clearness.':io_vals[io_dict['osk']],'Occ.Fraction.':io_vals[io_dict['zpp']],
+        'Cooling.Setpoint.':io_vals[io_dict['inclg']],'Lighting.Power.pct.':io_vals[io_dict['inlgt']],
+        'Ventilation.pct.':io_vals[io_dict['inven']],'MELs.pct.':io_vals[io_dict['inplg']],'Tzonei':io_vals[io_dict['zati']]
+    })
+
+    result.to_csv(baseline_csv, index=False)
+
 def cosimulate(handyfilesvars, bldg_type_vint, sf):
     # get the data of the choice strategy and store to respected schedule values
     climate_zones = ['2A','2B','3A','3B','3C','4A','4B','4C','5A','5B','5C','6A','6B','7A']
     # mock up test to always select climate zone 3A - Atlanta, GA
     cz = '3A'
-    fmu_path = 'fmu_files/Baseline_MediumOfficeDetailed_2004_' + cz + '.fmu'
-    update_csv = 'data/test_update.csv'
-    baseline_csv = 'cosim_outputs/baseline_MO_' + cz + '.csv'
+
+    fmu_dir = 'fmu_files'
+    cosim_dir = 'cosim_outputs'
+    data_dir = 'data'
+
+    bldg_file = 'Baseline_MediumOfficeDetailed_2004_' + cz
+    fmu_path = path.join(fmu_dir, bldg_file + '.fmu')
+    update_csv = path.join(data_dir + 'test_update.csv')
+    baseline_csv = path.join(cosim_dir, bldg_file + '.csv')
 
     # starting date
-    dt_jan1 = datetime(2006, 1, 1)
+    dt_jan1 = datetime(2006, 1, 1, 1)
     # starting date of cosimulation
     dt_cosim_start = datetime(2006, 8, 21)
     # ending date of cosimulation
@@ -1363,14 +1479,14 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
     # dates between the starting and ending of cosimulation dates
     dts_cosim = [dt_cosim_start + timedelta(days=x) 
                  for x in range(0, (dt_cosim_end - dt_cosim_start).days)]
-    #d dictionary of  Summer peak hours
+    # d dictionary of  Summer peak hours
     dr_dict = {"2A":[17,20],"2B":[17,20],"3A":[19,22],"3B":[18,21],
         "3C":[19,22],"4A":[12,15],"4B":[17,20],"4C":[17,20],"5A":[20,23],
         "5B":[17,20],"6A":[16,19],"6B":[17,20],"7A":[16,19]}
 
     # dts_dr_start = [datetime.combine(x, time(dr_dict[cz][0])) for x in dts_cosim]
     # dts_dr_end = [datetime.combine(x, time(dr_dict[cz][1])) for x in dts_cosim]
-    
+   
     # mock up test to always select DR periods between Noon and 4pm
     dts_dr_start = [datetime.combine(x, time(12)) for x in dts_cosim]
     dts_dr_end = [datetime.combine(x, time(16)) for x in dts_cosim]
@@ -1388,8 +1504,56 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
     #       format(dts_dr_start,dts_dr_end,hrs_cosim_start,hrs_cosim_end,
     #              hrs_dr_start,hrs_dr_end))
 
+    # default schedules from the E+ file for MediumOfficeDetailed Vintage 2004
+
+    sch_base = np.array([
+        # E+ input to 'OfficeMedium MinOA_MotorizedDamper_Sched'
+        (0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0),
+        # E+ input to 'OfficeMedium HTGSETP_SCH_PACU_VAV_bot'
+        (15.6,15.6,15.6,15.6,15.6,21,21,21,21,21,21,21,21,21,21,21,21,15.6,15.6,15.6,15.6,15.6,15.6,15.6),
+        # E+ input to 'OfficeMedium CLGSETP_SCH_NO_SETBACK'
+        (24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24),
+        # E+ input to 'OfficeMedium BLDG_LIGHT_SCH_2004'
+        (0.05,0.05,0.05,0.05,0.1,0.3,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9, 0.5, 0.3,0.3,0.2,0.2,0.1,0.05,0.05),
+        # E+ input to 'OfficeMedium BLDG_EQUIP_SCH_2004'
+        (0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.9,0.9,0.9,0.9,0.8,0.9,0.9,0.9,0.9,0.5,0.4,0.4,0.4,0.4,0.4,0.4,0.4)])
+
+    # EnergyPlus I/O variables via FMU
+    # OUTPUT VARIABLES
+    # oat - 'Site Outdoor Air Drybulb Temperature'
+    # orh - 'Site Outdoor Air Relative Humidity'
+    # osk - 'Site Daylighting Model Sky Clearness'
+    # pwr - 'Facility Total Electric Demand Power'
+    # zat - 'aggregate of 'Zone Air Temperature' 35 occupied zones
+    # zati - 'Zone Air Temperature' of Top_1 zone
+    # zcot - Zone Air CO2 Concentration of Top_1 zone
+    # zpp - aggregate of 'People Occupant Count' 35 occupied zones
+    # zrh - aggregate of 'Zone Air Relative Humidity' 35 occupied zones
+    # zpmv - 'Zone Thermal Comfort Fanger Model PMV' of Top_1 zone
+    # zlgt - 'Lights Electric Energy'
+    # zlux - aggregate of 'Daylighting Reference Point 1 Illuminance' 22 zones
+    # zplg - 'Electric Equipment Electric Energy'
+
+    # INPUT VARIABLES
+    # inclg - input to 'OfficeMedium CLGSETP_SCH_NO_SETBACK'
+    # inplg - input to 'OfficeMedium BLDG_EQUIP_SCH_2004'
+    # inlgt - input to 'OfficeMedium BLDG_LIGHT_SCH_2004'
+    # inven - input to 'OfficeMedium MinOA_MotorizedDamper_Sched'
+    # inclg_delt - difference of 'inclg' between t and t-1
+    # inplg_delt - difference of 'inplg' between t and t-1
+    # inlgt_delt - difference of 'inlgt' between t and t-1
+    # inven_delt - difference of 'inven' between t and t-1
+    # hdrst -
+    # hdren -
+    io_dict = {'oat':0,'orh':1,'osk':2,'pwr':3,'zat':4,'zati':5,'zcot':6,
+               'zpp':7,'zrh':8,'zpmv':9,'zlgt':10,'zlux':11,
+               'zplg':12,'inclg':13,'inplg':14,'inlgt':15,'inven':16,
+               'inclg_delt':17,'inplg_delt':18,'inlgt_delt':19,'inven_delt':20,
+               'hdrst':21,'hdren':22}
+                # 'zclg1':17,'zclg2':18,'zhtgsp':19,'zclgsp':20,'olux':21
+
     # Simulate the baseline for environment data and results
-    simBaseline(cz, baseline_csv, fmu_path, sf)
+    simBaseline(cz, baseline_csv, fmu_path, sf, sch_base, io_dict)
     # simulated number of days
     sim_days=365
     # starting simulated time
@@ -1407,157 +1571,14 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
     # initialize cosimulation routine
     model.initialize(tStart, tStop)
 
-    ## Below is a list of output variables to be fed into fmu
-    # E+ 'Site Outdoor Air Drybulb Temperature'
-    outdoor_drybulb = np.empty(n_steps)
-    # E+ 'Site Outdoor Air Relative Humidity'
-    outdoor_rh = np.empty(n_steps)
-    # E+ 'Site Daylighting Model Sky Clearness'
-    outdoor_skyclr = np.empty(n_steps)
-    # E+ sum of 'Site Exterior Horizontal Sky Illuminance'
-    #             'Site Exterior Horizontal Beam Illuminance'
-    outdoor_natlt = np.empty(n_steps)
-    # E+ aggregate of 'Daylighting Reference Point 1 Illuminance' 22 zones
-    z_illum = np.empty(n_steps)
-    # E+ aggregate of 'Zone Air Temperature' 35 occupied zones
-    z_temp = np.empty(n_steps)
-    # E+ 'Zone Air Temperature' of Top_1 zone
-    z_tempi = np.empty(n_steps)
-    # E+ Zone Air CO2 Concentration of Top_1 zone
-    z_cotwo = np.empty(n_steps)
-    # E+ aggregate of 'People Occupant Count' 35 occupied zones
-    z_ppl = np.empty(n_steps)
-    # E+ aggregate of 'Zone Air Relative Humidity' 35 occupied zones
-    z_rh = np.empty(n_steps)
-    # E+ 'Zone Thermal Comfort Fanger Model PMV' of Top_1 zone
-    z_pmv = np.empty(n_steps)
-    # E+ 'Zone Thermostat Heating Setpoint Temperature'
-    z_htgsp = np.empty(n_steps)
-    # E+ 'Zone Thermostat Cooling Setpoint Temperature'
-    z_clgsp = np.empty(n_steps)
-    # E+ 'Lights Electric Energy'
-    z_lgt = np.empty(n_steps)
-    # E+ 'Electric Equipment Electric Energy'
-    z_plg = np.empty(n_steps)
-    # E+ 'Facility Total Electric Demand Power'
-    z_blg = np.empty(n_steps)
-    # E+ 'Air System Total Cooling Energy' 23 Zone PVAV
-    z_clg1 = np.empty(n_steps)
-    # E+ 'Air System Total Cooling Energy' 21 Zone PVAV
-    z_clg2 = np.empty(n_steps)
-    # E+ input to 'OfficeMedium HTGSETP_SCH_PACU_VAV_bot'
-    # # in_htg = np.empty(n_steps+1)
-    # E+ input to 'OfficeMedium CLGSETP_SCH_NO_SETBACK'
-    in_clg = np.empty(n_steps+1)
-    # E+ input to 'OfficeMedium BLDG_EQUIP_SCH_2004'
-    in_plg = np.empty(n_steps+1)
-    # E+ input to 'OfficeMedium BLDG_LIGHT_SCH_2004'
-    in_lgt = np.empty(n_steps+1)
-    # E+ input to 'OfficeMedium MinOA_MotorizedDamper_Sched'
-    in_ven = np.empty(n_steps+1)
-
-    in_clg_stepdiff = np.empty(n_steps+1)
-    in_lgt_stepdiff = np.empty(n_steps+1)
-    in_plg_stepdiff = np.empty(n_steps+1)
-    in_ven_stepdiff = np.empty(n_steps+1)
-
-    # default schedules from the E+ file for MediumOfficeDetailed Vintage 2004
-    # E+ input to 'OfficeMedium MinOA_MotorizedDamper_Sched'
-    sch_ven = [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0]
-    # E+ input to 'OfficeMedium HTGSETP_SCH_PACU_VAV_bot'
-    # # sch_htg = [15.6,15.6,15.6,15.6,15.6,21,21,21,21,21,21,21,21,21,21,21,21,15.6,15.6,15.6,15.6,15.6,15.6,15.6]
-    # E+ input to 'OfficeMedium CLGSETP_SCH_NO_SETBACK'
-    sch_clg = [24 for i in range(24)]
-    # E+ input to 'OfficeMedium BLDG_LIGHT_SCH_2004'
-    sch_lgt = [0.05,0.05,0.05,0.05,0.1,0.3,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.5,0.3,0.3,0.2,0.2,0.1,0.05,0.05]
-    # E+ input to 'OfficeMedium BLDG_EQUIP_SCH_2004'
-    sch_plg = [0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.9,0.9,0.9,0.9,0.8,0.9,0.9,0.9,0.9,0.5,0.4,0.4,0.4,0.4,0.4,0.4,0.4]
-    # numpy array to keep track hours since DR start
-    hrs_since_dr_start = np.empty(n_steps)
-    # numpy array to keep track hours since DR end
-    hrs_since_dr_end = np.empty(n_steps)
-
-    def cosim_updatecsv(dt_cosim_index):
-        ## the file with Na's data at the initial, cleared, and repopulated from 
-        ## Energyplus output at each DR event (per-day) and 2-hour rebound period.
-        ## Run, for example, every 5 events and re-initialized with new data.
-
-        out_dt_dr_start = (dts_dr_start[dt_cosim_index] + timedelta(hours=1))
-        out_dt_dr_end = (dts_dr_end[dt_cosim_index] + timedelta(hours=2))
-        out_hr_dr_start = hrs_dr_start[dt_cosim_index] + 1
-        out_hr_dr_end = hrs_dr_end[dt_cosim_index] + 3
-
-        # print('TIME')
-        # print('dt_cosim_index {!s} out_dt_dr_start {!s} out_dt_dr_end {!s} out_hr_dr_start {!s} out_hr_dr_end {!s}'.
-        #     format(dt_cosim_index, out_dt_dr_start, out_dt_dr_end, out_hr_dr_start, out_hr_dr_end))
-        
-        #hrtime = pd.date_range(start=out_dt_dr_start, end=out_dt_dr_end, freq='60min').values
-        hrtime = pd.date_range(start=out_dt_dr_start, end=out_dt_dr_end, freq='H').to_pydatetime()
-        update_res = pd.DataFrame(data={'datetime':hrtime,
-            'ID': 21,
-            'Vintages': '2004',
-            'Day.type': 1,
-            'Day.number': int((i-hrs_cosim_start[0])/24) + 1,
-            'Hour.number': [x.hour for x in hrtime],
-            'Climate.zone': cz,
-            'Demand.Power.sf.': z_blg[out_hr_dr_start:out_hr_dr_end] / sf,
-            'Indoor.Temp.F.': z_temp[out_hr_dr_start:out_hr_dr_end],
-            'Indoor.Humid.': z_rh[out_hr_dr_start:out_hr_dr_end],
-            'Outdoor.Temp.F.': outdoor_drybulb[out_hr_dr_start:out_hr_dr_end],
-            'Outdoor.Humid.': outdoor_rh[out_hr_dr_start:out_hr_dr_end],
-            'Outdoor.Sky.Clearness.': outdoor_skyclr[out_hr_dr_start:out_hr_dr_end],
-            'Occ.Fraction.': z_ppl[out_hr_dr_start:out_hr_dr_end],
-            'Cooling.Setpoint.': in_clg[out_hr_dr_start:out_hr_dr_end],
-            'Lighting.Power.pct.': in_lgt[out_hr_dr_start:out_hr_dr_end],
-            'Ventilation.pct.': in_ven[out_hr_dr_start:out_hr_dr_end],
-            'MELs.pct.': in_plg[out_hr_dr_start:out_hr_dr_end],
-            'Since.DR.Started.': hrs_since_dr_start[out_hr_dr_start:out_hr_dr_end],
-            'Since.DR.Ended.': hrs_since_dr_end[out_hr_dr_start:out_hr_dr_end],
-            'Since.Pre.cooling.Ended.': 0,
-            'Since.Pre.cooling.Started.': 0,
-            'Cooling.Setpoint.Diff.One.Step.': in_clg_stepdiff[out_hr_dr_start:out_hr_dr_end],
-            'Lighting.Power.Diff.pct.One.Step.': in_lgt_stepdiff[out_hr_dr_start:out_hr_dr_end],
-            'MELs.Power.Diff.pct.One.Step.': in_plg_stepdiff[out_hr_dr_start:out_hr_dr_end],
-            'Ventilation.Diff.pct.One.Step.': in_ven_stepdiff[out_hr_dr_start:out_hr_dr_end],
-            'Pre.cooling.Temp.Increase.': 0,
-            'Pre.cooling.Duration.': 0
-        })
-
-        baseline_df = pd.read_csv(baseline_csv, parse_dates=True, index_col='datetime')
-        update_res = update_res.set_index('datetime')
-
-        update_res['Demand.Power.Diff.sf.'] = (update_res['Demand.Power.sf.'] - baseline_df['Demand.Power.sf.']) * -1
-        update_res['Indoor.Temp.Diff.F.'] = update_res['Indoor.Temp.F.'] - baseline_df['Indoor.Temp.F.']
-        update_res['Indoor.Humid.Diff.'] = update_res['Indoor.Humid.'] - baseline_df['Indoor.Humid.']
-        update_res['Cooling.Setpoint.Diff.'] = (update_res['Cooling.Setpoint.'] - baseline_df['Cooling.Setpoint.'])
-        update_res['Lighting.Power.Diff.pct.'] = (update_res['Lighting.Power.pct.'] - baseline_df['Lighting.Power.pct.'])
-        update_res['Ventilation.Diff.pct.'] = (update_res['Ventilation.pct.'] - baseline_df['Ventilation.pct.'])
-        update_res['MELs.Diff.pct.'] = (update_res['MELs.pct.'] - baseline_df['MELs.pct.']) * -1
-
-        update_res.reset_index(inplace=True)
-        update_res = update_res[[
-            'ID','Vintages','Day.type','Day.number','Hour.number',
-            'Climate.zone','Demand.Power.Diff.sf.','Indoor.Temp.Diff.F.',
-            'Indoor.Humid.Diff.','Outdoor.Temp.F.','Outdoor.Humid.',
-            'Outdoor.Sky.Clearness.','Occ.Fraction.','Cooling.Setpoint.Diff.',
-            'Lighting.Power.Diff.pct.','Ventilation.Diff.pct.',
-            'MELs.Diff.pct.','Since.DR.Started.','Since.DR.Ended.',
-            'Since.Pre.cooling.Ended.','Since.Pre.cooling.Started.',
-            'Cooling.Setpoint.Diff.One.Step.','Lighting.Power.Diff.pct.One.Step.',
-            'MELs.Power.Diff.pct.One.Step.','Ventilation.Diff.pct.One.Step.',
-            'Pre.cooling.Temp.Increase.','Pre.cooling.Duration.']]
-
-        if os.path.exists(update_csv):
-            update_res.to_csv(update_csv, mode='a', header=False, index=False)
-        else:
-            update_res.to_csv(update_csv, index=False)
+    io_vals = np.empty(shape=(len(io_dict),n_steps))
 
     i = 0
     dt_cosim_i = 0
-    
+   
     while True:
         hour = int((t[i]/3600)%24)
-
+        day_i = int((i-hrs_cosim_start[0])/24) + 1
         ###############################################################
 
         if i >= hrs_cosim_start[dt_cosim_i] and i <= hrs_cosim_end[dt_cosim_i]:
@@ -1597,49 +1618,55 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
 
                 if i <= hrs_dr_start[dt_cosim_i]: 
                     # useful for pre-cooling
-                    in_clg[i] = sch_clg[hour] - mag_pc
+                    io_vals[io_dict['inclg']][i] = sch_base[2][hour] - mag_pc
                 else:
-                    in_clg[i] = sch_clg[hour] + delt_clg
-                    in_lgt[i] = sch_lgt[hour] * (1 - pct_lgt)
-                    in_plg[i] = sch_plg[hour] * (1 - pct_plg)
-                    in_ven[i] = sch_ven[hour] * (1 - pct_ven)
-                    hrs_since_dr_start[i] = i - hrs_dr_start[dt_cosim_i]
-                    hrs_since_dr_end[i] = 0
+                    io_vals[io_dict['inven']][i] = sch_base[0][hour] * (1 - pct_ven)
+                    io_vals[io_dict['inclg']][i] = sch_base[2][hour] + delt_clg
+                    io_vals[io_dict['inlgt']][i] = sch_base[3][hour] * (1 - pct_lgt)
+                    io_vals[io_dict['inplg']][i] = sch_base[4][hour] * (1 - pct_plg)
+                    io_vals[io_dict['hdrst']][i] = i - io_vals[io_dict['hdrst']][dt_cosim_i]
+                    io_vals[io_dict['hdren']][i] = 0
 
                     print('delt_clg {!s} dur_pc {!s} mag_pc {!s} pct_lgt {!s} pct_plg {!s} pct_ven {!s}'.
                           format(delt_clg, dur_pc, mag_pc, pct_lgt, pct_plg, pct_ven))
-                    print('hour {!s} in_clg {!s} z_clgsp {!s} z_tempi {!s} in_lgt {!s} in_plg {!s} in_ven {!s}'.
-                          format(hour, in_clg[i], z_clgsp[i], z_tempi[i], in_lgt[i], in_plg[i], in_ven[i]))
+
             else:
-                in_clg[i] = sch_clg[hour]
-                in_lgt[i] = sch_lgt[hour]
-                in_plg[i] = sch_plg[hour]
-                in_ven[i] = sch_ven[hour]
-                hrs_since_dr_start[i] = 0
+                io_vals[io_dict['inven']][i] = sch_base[0][hour]
+                io_vals[io_dict['inclg']][i] = sch_base[2][hour]
+                io_vals[io_dict['inlgt']][i] = sch_base[3][hour]
+                io_vals[io_dict['inplg']][i] = sch_base[4][hour]
+                io_vals[io_dict['hdrst']][i] = 0
                 if i > (hrs_dr_end[dt_cosim_i]) and i <= (hrs_dr_end[dt_cosim_i] + 2):
-                    hrs_since_dr_end[i] = i - hrs_dr_end[dt_cosim_i]
+                    io_vals[io_dict['hdren']][i] = i - hrs_dr_end[dt_cosim_i]
                     if i == (hrs_dr_end[dt_cosim_i] + 2):
-                        cosim_updatecsv(dt_cosim_i)
+                        #cosim_updatecsv(dt_cosim_i)
+                        
+                        updateTestUpdateCSV(cz, baseline_csv, update_csv, day_i, dt_cosim_i, io_dict, io_vals, dts_dr_start, dts_dr_end, hrs_dr_start, hrs_dr_end, hrs_rebound)
                         dt_cosim_i += 1
                     if dt_cosim_i >= len(hrs_dr_start):
                         dt_cosim_i -= 1
                 else:
-                    hrs_since_dr_end[i] = 0
+                    io_vals[io_dict['hdren']][i] = 0
 
         else:
-            in_clg[i] = sch_clg[hour]
-            in_lgt[i] = sch_lgt[hour]
-            in_plg[i] = sch_plg[hour]
-            in_ven[i] = sch_ven[hour]
+            io_vals[io_dict['inven']][i] = sch_base[0][hour]
+            io_vals[io_dict['inclg']][i] = sch_base[2][hour]
+            io_vals[io_dict['inlgt']][i] = sch_base[3][hour]
+            io_vals[io_dict['inplg']][i] = sch_base[4][hour]
 
         if i > 0:
-            in_clg_stepdiff[i] = in_clg[i] - in_clg[i-1]
-            in_lgt_stepdiff[i] = in_lgt[i] - in_lgt[i-1]
-            in_plg_stepdiff[i] = in_plg[i] - in_plg[i-1]
-            in_ven_stepdiff[i] = in_ven[i] - in_ven[i-1]
+            io_vals[io_dict['inclg_delt']][i] =\
+                io_vals[io_dict['inclg']][i] - io_vals[io_dict['inclg']][i-1]
+            io_vals[io_dict['inlgt_delt']][i] =\
+                io_vals[io_dict['inlgt']][i] - io_vals[io_dict['inlgt']][i-1]
+            io_vals[io_dict['inplg_delt']][i] =\
+                io_vals[io_dict['inplg']][i] - io_vals[io_dict['inplg']][i-1]
+            io_vals[io_dict['inven_delt']][i] =\
+                io_vals[io_dict['inven']][i] - io_vals[io_dict['inven']][i-1]
         ###############################################################
         model.set(['InMELsSch', 'InLightSch', 'InCoolingSch', 'InVentSch'],
-                  [in_plg[i], in_lgt[i], in_clg[i], in_ven[i]])
+                  [io_vals[io_dict['inplg']][i],io_vals[io_dict['inlgt']][i],
+                   io_vals[io_dict['inclg']][i],io_vals[io_dict['inven']][i]])
 
         model.do_step(current_t = t[i], step_size=hStep, new_step=True)
 
@@ -1660,31 +1687,25 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
         temp_wght = np.mean(temp_np)
         ppl_wght = np.mean(ppl_np)
 
-        z_temp[i] = (temp_wght * 9 / 5) + 32   #farenheit
-        z_tempi[i] = (model.get('ZAT_31'))     # * 9 / 5) + 32
-        z_ppl[i] = ppl_wght
-        z_rh[i] = rh_wght
+        io_vals[io_dict['zat']][i] = (temp_wght * 9 / 5) + 32   #farenheit
+        io_vals[io_dict['zati']][i] = (model.get('ZAT_31'))     # * 9 / 5) + 32
+        io_vals[io_dict['zpp']][i] = ppl_wght
+        io_vals[io_dict['zrh']][i] = rh_wght
 
-        z_cotwo[i] = model.get('ZoneCOTwo')
-        z_pmv[i] = model.get('ZonePMV')
-        z_htgsp[i] = model.get('ZoneHTGsp')
-        z_clgsp[i] = model.get('ZoneCLGsp')
-        z_lgt[i] = model.get('LightsEnergy') / 3600000 # kilowatt-hour
-        z_plg[i] = model.get('MelsEnergy') / 3600000
-        z_blg[i] = model.get('BldgPwr') / 1000
-        z_clg1[i] = model.get('CoolingEnergy1') / 3600000
-        z_clg2[i] = model.get('CoolingEnergy2') / 3600000
+        io_vals[io_dict['zcot']][i] = model.get('ZoneCOTwo')
+        io_vals[io_dict['zpmv']][i] = model.get('ZonePMV')
+        io_vals[io_dict['zlgt']][i] = model.get('LightsEnergy') / 3600000 # kwh
+        io_vals[io_dict['zplg']][i] = model.get('MelsEnergy') / 3600000
+        io_vals[io_dict['pwr']][i] = model.get('BldgPwr') / (1000 * sf)
 
-        outdoor_skyclr[i] = model.get('OutSkyClear')
-        outdoor_drybulb[i] = (model.get('OutDrybulb') * 9 / 5) + 32 #farenheit
-        outdoor_rh[i] = model.get('OutRH')
-
-
-        # print('Time {0}, z_temp {1}, z_tempi {2}'.format(t[i],z_temp[i],z_tempi[i]))
+        io_vals[io_dict['osk']][i] = model.get('OutSkyClear')
+        io_vals[io_dict['oat']][i] = (model.get('OutDrybulb') * 9 / 5) + 32 # F
+        io_vals[io_dict['orh']][i] = model.get('OutRH')
 
         i += 1
         if (i == n_steps):
             break
+
 
 def run_mod_prediction(handyfilesvars, trace, mod, dat, n_samples, inds):
     # Initialize variable inputs and outputs for the given model type
