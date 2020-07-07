@@ -171,7 +171,7 @@ class UsefulFilesVars(object):
             tmp_dmd_names_dtypes, co2_names_dtypes, lt_names_dtypes, \
                 pc_tmp_names_dtypes = (
                     [('id', 'vintage', 'day_typ', 'day_num', 'hour', 'climate',
-                      'dmd_delt_sf', 't_in_delt','rh_in_delt', 't_out',
+                      'dmd_delt_sf', 't_in_delt', 'rh_in_delt', 't_out',
                       'rh_out', 'cloud_out', 'occ_frac', 'tsp_delt',
                       'lt_pwr_delt_pct', 'ven_delt_pct', 'mels_delt_pct',
                       'hrs_since_dr_st', 'hrs_since_dr_end',
@@ -187,15 +187,16 @@ class UsefulFilesVars(object):
         else:
             tmp_dmd_names_dtypes, co2_names_dtypes, lt_names_dtypes, \
                 pc_tmp_names_dtypes = ([(
-                    'Name', 'Hr', 't_out', 'rh_out', 'lt_nat', 'base_lt_frac',
-                    'occ_frac', 'delt_price_kwh',
-                    'hrs_since_dr_st', 'hrs_since_dr_end',
-                    'hrs_since_pc_st', 'hrs_since_pc_end',
-                    'tsp_delt', 'lt_pwr_delt_pct', 'ven_delt_pct',
-                    'mels_delt_pct', 'tsp_delt_lag', 'lt_pwr_delt_pct_lag',
-                    'ven_delt_pct_lag', 'mels_delt_pct_lag',
-                    'pc_tmp_inc', 'pc_length', 'lt_pwr_delt'),
-                    (['<U25'] + ['<f8'] * 22)] for n in range(4))
+                    'Name', 'Hr', 't_out', 'rh_out', 'lt_nat',
+                    'occ_frac', 'base_lt_frac', 'delt_price_kwh',
+                    'hrs_since_dr_st',
+                    'hrs_since_dr_end', 'hrs_since_pc_st',
+                    'hrs_since_pc_end', 'tsp_delt', 'lt_pwr_delt_pct',
+                    'ven_delt_pct', 'mels_delt_pct', 'tsp_delt_lag',
+                    'lt_pwr_delt_pct_lag', 'ven_delt_pct_lag',
+                    'mels_delt_pct_lag', 'pc_tmp_inc', 'pc_length',
+                    'lt_pwr_delt'),
+                    (['<U50'] + ['<f8'] * 22)] for n in range(4))
             self.coef_names_dtypes = None
 
         # For each model type, store information on input/output data file
@@ -250,6 +251,7 @@ class UsefulFilesVars(object):
 
         }
         self.predict_out = ("data", "recommendations.json")
+
 
 class ModelDataLoad(object):
     """Load the data files needed to initialize, estimate, or run models.
@@ -363,9 +365,11 @@ class ModelDataLoad(object):
                 self.oaf_delt = common_data['ven_delt_pct']
                 self.plug_delt = common_data['mels_delt_pct']
                 self.price_delt = common_data['delt_price_kwh']
+                self.pc_temp = common_data['pc_tmp_inc']
             else:
                 self.oaf_delt, self.plug_delt, self.price_delt = (
-                    None for n in range(3))
+                    None for n in range(2))
+
 
 class ModelIO(object):
     """Initialize input/output variables/data structure for each model
@@ -514,7 +518,6 @@ class ModelIO(object):
                 tmp_oaf_co2, tmp_out_tmp_delt, rh_out_tmp_delt], axis=1)
             # Set model output (Y) variable for estimation cases
             if mod_init is True or mod_est is True or mod_assess is True:
-
                 self.Y_all = data.co2['co2_in_delt']
 
         elif mod == "lighting":
@@ -600,6 +603,7 @@ class ModelIO(object):
             if mod_init is True or mod_est is True or mod_assess is True:
                 self.Y_all = data.pc_tmp['t_in_delt']
 
+
 class ModelIOTrain():
     """Pull subset of data observations for use in model training.
 
@@ -620,6 +624,7 @@ class ModelIOTrain():
         else:
             self.X = io_dat.X_all
             self.Y = io_dat.Y_all
+
 
 class ModelIOTest():
     """Pull subset of data observations for use in model testing.
@@ -642,6 +647,7 @@ class ModelIOTest():
             self.X = io_dat.X_all
             self.Y = io_dat.Y_all
 
+
 class ModelIOPredict():
     """Pull subset of data observations for use in model prediction.
 
@@ -654,6 +660,7 @@ class ModelIOPredict():
 
         # Restrict data to the current hour in the prediction time horizon
         self.X = io_dat.X_all[hr_inds]
+
 
 def main(base_dir):
     """Implement Bayesian network and plot resultant parameter estimates."""
@@ -741,7 +748,7 @@ def main(base_dir):
     elif opts.mod_est is True:
 
         # Set total number of model updates to execute
-        updates = 1
+        updates = 8
         # Set number of days/events per update data batch
         ndays_update = 10
         # Initialize model parameter traces across all updates, stored in list
@@ -868,6 +875,7 @@ def main(base_dir):
                 dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
             run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
             print("Complete.")
+
     elif opts.mod_cosimulate is True:
         print("Cosimulation....")
         handyfilesvars = UsefulFilesVars(
@@ -875,126 +883,122 @@ def main(base_dir):
         #cosimulate(handyfilesvars, bldg_type_vint, sf)
         cosimulate(handyfilesvars, bldg_type_vint, sf)
         print("Complete.")
+
     else:
+        # Generate predictions for a next-day DR event with conditions and
+        # candidate strategies described by an updated input file
+        # (test_predict.csv, which is loaded into handyfilesvars)
+        predict_out = gen_recs(handyfilesvars, sf)
 
-        print("Loading input data...")
-        # Read-in input data for scenario
-        dat = ModelDataLoad(
-            handyfilesvars, opts.mod_init, opts.mod_assess,
-            opts.mod_est, update=None, ndays_update=None)
-        # Set number of hours to predict across
-        n_hrs = len(np.unique(dat.hr))
-        # Find names of candidate DR strategies
-        names = np.unique(dat.strategy)
-        # Set number of DR strategies to predict across
-        n_choices = len(names)
-        # Set number of samples to draw. for predictions
-        n_samples = 1000
-        # Initialize posterior predictive data dict
-        pp_dict = {
-            key: [] for key in handyfilesvars.mod_dict.keys()}
-        # Sample noise to use in the choice model
-        rand_elem = np.random.normal(
-            loc=0, scale=1, size=(n_samples, n_choices))
-        # Initialize a numpy array that stores the count of the number of
-        # times each candidate DR strategy is selected across simulated hours
-        counts = np.zeros(n_choices)
-        # Initialize a total count to use in normalizing number of selections
-        # by strategy such that it is reported out as a % of simulated hours
-        counts_denom = 0
-
-        # Use latest set of coefficients from DCE future scenario results
-        # (Order: economic benefit, temperature, temperature precool, lighting,
-        # OAF pct delta, plug load pct delta, intercept)
-        betas_choice = np.array([
-            0.000345, -0.491951, 0.127805, -1.246971, 0.144217, -2.651832])
-        #betas_choice_c1
-        #betas_choice_c2
-
-
-        # Loop through the set of scenarios considered for FY19 EOY deliverable
-        for hr in range(n_hrs):
-            print("Making predictions for hour " + str(hr+1))
-            # Set data index that is unique to the current hour
-            inds = np.where(dat.hr == (hr+1))
-            for mod in handyfilesvars.mod_dict.keys():
-                # Reload trace
-                with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
-                        "io_data"][1]), 'rb') as store:
-                    trace = pickle.load(store)['trace']
-                pp_dict[mod] = run_mod_prediction(
-                    handyfilesvars, trace, mod, dat, n_samples, inds)
-            # Multiply change in demand/sf by sf and price delta to get total
-            # cost difference for the operator
-            cost_delt = pp_dict["demand"]['dmd'] * sf * dat.price_delt[inds]
-            # Extend oaf delta values for each choice across all samples
-            oaf_delt = np.tile(dat.oaf_delt[inds], (n_samples, 1))
-            # Extend plug load delta values for each choice across all samples
-            plug_delt = np.tile(dat.plug_delt[inds], (n_samples, 1))
-            # Extend intercept input for each choice across all samples
-            # NOTE: CURRENTLY NO INTERCEPT TERM IN DCE ANALYSIS OUTPUTS
-            # intercept = np.tile(np.ones(n_choices), (n_samples, 1))
-            # Stack all model inputs into a single array
-            # x_choice = np.stack([
-            #     cost_delt, pp_dict["temperature"]["ta"],
-            #     pp_dict["co2"]["co2"], pp_dict["lighting"]["lt"],
-            #     plug_delt, intercept])
-            x_choice = np.stack([
-                cost_delt, pp_dict["temperature"]["ta"],
-                pp_dict["temperature_precool"]["ta_pc"],
-                pp_dict["lighting"]["lt"], oaf_delt, plug_delt])
-            # Multiply model inputs by betas to yield choice logits
-            choice_logits = np.sum([x_choice[i] * betas_choice[i] for
-                                   i in range(len(x_choice))], axis=0) + \
-                rand_elem
-            # Softmax transformation of logits into choice probabilities
-            choice_probs = softmax(choice_logits, axis=1)
-            # choice_logits_c1
-            # choice_logits_c2
-
-            # choice_probs_c1
-            # choice_probs_c2
-
-            # class membership models
-            # beta_class_1  #numpy array of the number of parameters
-            # beta_class_2  #numpy array of the number of parameters
-
-            # x_class_1 #lets say 3 vars are relevant i.e. size of blg, type of blg, age of blg
-            # x_class_2 #lets say 3 vars are relevant i.e. size of blg, type of blg, age of blg
-
-            # class_logits_1 #np.sum with x_class_1
-            # class_logits_2 #np.sum with x_class_2
-
-            # class_probs_1 # = class_logits_1 / np.sum(class_logits_1, class_logits_2)
-            # class_probs_2 # = class_logits_2 / np.sum(class_logits_1, class_logits_2)
-
-            # final_choice_probs = class_probs_1 * choice_probs_c1 + class_probs_2 * choice_probs_c2
-
-            # Simulate choices across all samples given inputs and betas
-            choice_out = [
-                np.random.choice(n_choices, 1000, p=x) for x in choice_probs]
-            # Report frequency with which each choice occurs for the scenario
-            unique, counts_hr = np.unique(choice_out, return_counts=True)
-            # Add to count of frequency with which each DR strategy is
-            # selected
-            counts[unique] += counts_hr
-            # Add to total number of simulated hours
-            counts_denom += np.sum(counts_hr)
-        # Store summary of the percentage of simulated hours that each
-        # DR strategy was predicted to be selected in a dict
-        predict_out = {
-            "notes": (
-                "Percentage of simulations in which each candidate DR "
-                "strategy is chosen for current event"),
-            "units": "%",
-            "predictions": {
-                x: round(((y / counts_denom) * 100), 1) for
-                x, y in zip(names, counts)}
-        }
-        # Write summary dict out to JSON file
+        # Write summary dict with predictions out to JSON file
         with open(path.join(
                 base_dir, *handyfilesvars.predict_out), "w") as jso:
             json.dump(predict_out, jso, indent=2)
+
+
+def gen_recs(handyfilesvars, sf):
+
+    # Notify user of input data read
+    print("Loading input data...")
+    # Read-in input data for scenario
+    dat = ModelDataLoad(
+        handyfilesvars, opts.mod_init, opts.mod_assess,
+        opts.mod_est, update=None, ndays_update=None)
+    # Set number of hours to predict across
+    n_hrs = len(np.unique(dat.hr))
+    # Find names of candidate DR strategies
+    names = dat.strategy[np.where(dat.hr == 1)]
+    # Set number of DR strategies to predict across
+    n_choices = len(names)
+    # Set number of samples to draw. for predictions
+    n_samples = 1000
+    # Initialize posterior predictive data dict
+    pp_dict = {
+        key: [] for key in handyfilesvars.mod_dict.keys()}
+    # Sample noise to use in the choice model
+    rand_elem = np.random.normal(
+        loc=0, scale=1, size=(n_samples, n_choices))
+    # Initialize a numpy array that stores the count of the number of
+    # times each candidate DR strategy is selected across simulated hours
+    counts = np.zeros(n_choices)
+    # Initialize a total count to use in normalizing number of selections
+    # by strategy such that it is reported out as a % of simulated hours
+    counts_denom = 0
+
+    # Use latest set of coefficients from DCE future scenario results
+    # (Order: economic benefit, temperature, temperature precool, lighting,
+    # OAF pct delta, plug load pct delta)
+
+    # ORIGINAL
+    # betas_choice = np.array([
+    #     0.000345, -0.491951, 0.127805, -1.246971, 0.144217, -2.651832])
+
+    # UPDATED
+    betas_choice = np.array([0.025, -0.31, 0.14, -1.4, 0.05, 0.26])
+
+    # Loop through all hours considered for the event (event plus rebound)
+    for hr in range(n_hrs):
+        print("Making predictions for hour " + str(hr+1))
+        # Set data index that is unique to the current hour
+        inds = np.where(dat.hr == (hr+1))
+        for mod in handyfilesvars.mod_dict.keys():
+            # Reload trace
+            with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
+                    "io_data"][1]), 'rb') as store:
+                trace = pickle.load(store)['trace']
+            pp_dict[mod] = run_mod_prediction(
+                handyfilesvars, trace, mod, dat, n_samples, inds)
+        # Multiply change in demand/sf by sf and price delta to get total
+        # cost difference for the operator; reflect DCE units of $100
+        cost_delt = (
+            pp_dict["demand"]['dmd'] * sf * dat.price_delt[inds]) / 100
+        # Extend oaf delta values for each choice across all samples
+        oaf_delt = np.tile(dat.oaf_delt[inds], (n_samples, 1))
+        # Extend plug load delta values for each choice across all samples
+        plug_delt = np.tile(dat.plug_delt[inds], (n_samples, 1))
+        # Extend pre-cooling values for each choice across all samples
+        pc_temp = np.tile(dat.pc_temp[inds], (n_samples, 1))
+        # Extend intercept input for each choice across all samples
+        # NOTE: CURRENTLY NO INTERCEPT TERM IN DCE ANALYSIS OUTPUTS
+        # intercept = np.tile(np.ones(n_choices), (n_samples, 1))
+        # Stack all model inputs into a single array
+        # x_choice = np.stack([
+        #     cost_delt, pp_dict["temperature"]["ta"],
+        #     pp_dict["co2"]["co2"], pp_dict["lighting"]["lt"],
+        #     plug_delt, intercept])
+        x_choice = np.stack([
+            cost_delt, pp_dict["temperature"]["ta"],
+            pc_temp, pp_dict["lighting"]["lt"], oaf_delt, plug_delt])
+        # Multiply model inputs by betas to yield choice logits
+        choice_logits = np.sum([x_choice[i] * betas_choice[i] for
+                               i in range(len(x_choice))], axis=0) + \
+            rand_elem
+        # Softmax transformation of logits into choice probabilities
+        choice_probs = softmax(choice_logits, axis=1)
+        # Simulate choices across all samples given inputs and betas
+        choice_out = [
+            np.random.choice(n_choices, 1000, p=x) for x in choice_probs]
+        # Report frequency with which each choice occurs for the scenario
+        unique, counts_hr = np.unique(choice_out, return_counts=True)
+        # Add to count of frequency with which each DR strategy is
+        # selected
+        counts[unique] += counts_hr
+        # Add to total number of simulated hours
+        counts_denom += np.sum(counts_hr)
+    # Store summary of the percentage of simulated hours that each
+    # DR strategy was predicted to be selected in a dict
+    predict_out = {
+        "notes": (
+            "Percentage of simulations in which each candidate DR "
+            "strategy is chosen for current event"),
+        "units": "%",
+        "predictions": {
+            x: round(((y / counts_denom) * 100), 1) for
+            x, y in zip(names, counts)}
+    }
+
+    return predict_out
+
 
 def simBaseline(cz, baseline_csv, fmu_path, sf, sch_base, io_dict):
     """ This function is used to collect results from  baseline runs
@@ -1102,6 +1106,7 @@ def simBaseline(cz, baseline_csv, fmu_path, sf, sch_base, io_dict):
 
     result.to_csv(baseline_csv, index=False)
 
+
 def updateTestPredictCSV(handyfilesvars, baseline_csv, hr_dr_start, hr_dr_end, hrs_rbnd):
 
     base_df = pd.read_csv(baseline_csv, parse_dates=True)
@@ -1148,6 +1153,7 @@ def updateTestPredictCSV(handyfilesvars, baseline_csv, hr_dr_start, hr_dr_end, h
         predict_df = predict_df.append(temp_df)
 
     predict_df.to_csv(predict_csv, index=False)
+
 
 def updateTestUpdateCSV(cz, baseline_csv, update_csv, day_i, dt_cosim_i, io_dict, io_vals, dts_dr_start, dts_dr_end, hrs_dr_start, hrs_dr_end, hrs_rbnd):
     # the file with Na's data at the initial, cleared, and repopulated from 
@@ -1224,236 +1230,6 @@ def updateTestUpdateCSV(cz, baseline_csv, update_csv, day_i, dt_cosim_i, io_dict
     else:
         update_res.to_csv(update_csv, index=False)
 
-def rank_strategies(handyfilesvars, bldg_type_vint, sf):
-    print("Loading input data...")
-    # Read-in input data for scenario
-    dat = ModelDataLoad(
-        handyfilesvars, opts.mod_init, opts.mod_assess,
-        opts.mod_est, update=None, ndays_update=None)
-    # Set number of hours to predict across
-    n_hrs = len(np.unique(dat.hr))
-    # Find names of candidate DR strategies
-    names = np.unique(dat.strategy)
-    # Set number of DR strategies to predict across
-    n_choices = len(names)
-    # Set number of samples to draw. for predictions
-    n_samples = 1000
-    # Initialize posterior predictive data dict
-    pp_dict = {
-        key: [] for key in handyfilesvars.mod_dict.keys()}
-    # Sample noise to use in the choice model
-    rand_elem = np.random.normal(
-        loc=0, scale=1, size=(n_samples, n_choices))
-    # Initialize a numpy array that stores the count of the number of
-    # times each candidate DR strategy is selected across simulated hours
-    counts = np.zeros(n_choices)
-    # Initialize a total count to use in normalizing number of selections
-    # by strategy such that it is reported out as a % of simulated hours
-    counts_denom = 0
-
-    # Use latest set of coefficients from DCE future scenario results
-    # (Order: economic benefit, temperature, temperature precool, lighting,
-    # OAF pct delta, plug load pct delta, intercept)
-    betas_choice = np.array([
-    #    0.000345, -0.491951, 0.127805, -1.246971, 0.144217, -2.651832])
-        0.025, 0.14, -0.31, 0.05, -1.4, 0.26])
-    #betas_choice_c1
-    #betas_choice_c2
-
-
-    # Loop through the set of scenarios considered for FY19 EOY deliverable
-    for hr in range(n_hrs):
-        print("Making predictions for hour " + str(hr+1))
-        # Set data index that is unique to the current hour
-        inds = np.where(dat.hr == (hr+1))
-        for mod in handyfilesvars.mod_dict.keys():
-            # Reload trace
-            with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
-                    "io_data"][1]), 'rb') as store:
-                trace = pickle.load(store)['trace']
-            pp_dict[mod] = run_mod_prediction(
-                handyfilesvars, trace, mod, dat, n_samples, inds)
-        # Multiply change in demand/sf by sf and price delta to get total
-        # cost difference for the operator
-        cost_delt = pp_dict["demand"]['dmd'] * sf * dat.price_delt[inds]
-        # Extend oaf delta values for each choice across all samples
-        oaf_delt = np.tile(dat.oaf_delt[inds], (n_samples, 1))
-        # Extend plug load delta values for each choice across all samples
-        plug_delt = np.tile(dat.plug_delt[inds], (n_samples, 1))
-        # Extend intercept input for each choice across all samples
-        # NOTE: CURRENTLY NO INTERCEPT TERM IN DCE ANALYSIS OUTPUTS
-        # intercept = np.tile(np.ones(n_choices), (n_samples, 1))
-        # Stack all model inputs into a single array
-        # x_choice = np.stack([
-        #     cost_delt, pp_dict["temperature"]["ta"],
-        #     pp_dict["co2"]["co2"], pp_dict["lighting"]["lt"],
-        #     plug_delt, intercept])
-        x_choice = np.stack([
-            cost_delt, pp_dict["temperature"]["ta"],
-            pp_dict["temperature_precool"]["ta_pc"],
-            pp_dict["lighting"]["lt"], oaf_delt, plug_delt])
-        # Multiply model inputs by betas to yield choice logits
-        choice_logits = np.sum([x_choice[i] * betas_choice[i] for
-                               i in range(len(x_choice))], axis=0) + \
-            rand_elem
-        # Softmax transformation of logits into choice probabilities
-        choice_probs = softmax(choice_logits, axis=1)
-        #choice_logits_c1
-        #choice_logits_c2
-
-        #choice_probs_c1
-        #choice_probs_c2
-
-        #class membership models
-        #beta_class_1  #numpy array of the number of parameters
-        #beta_class_2  #numpy array of the number of parameters
-
-        # x_class_1 #lets say 3 vars are relevant i.e. size of blg, type of blg, age of blg
-        # x_class_2 #lets say 3 vars are relevant i.e. size of blg, type of blg, age of blg
-
-        #class_logits_1 #np.sum with x_class_1
-        #class_logits_2 #np.sum with x_class_2
-
-        #class_probs_1 # = class_logits_1 / np.sum(class_logits_1, class_logits_2)
-        #class_probs_2 # = class_logits_2 / np.sum(class_logits_1, class_logits_2)
-
-        #final_choice_probs = class_probs_1 * choice_probs_c1 + class_probs_2 * choice_probs_c2
-        
-
-        # Simulate choices across all samples given inputs and betas
-        choice_out = [
-            np.random.choice(n_choices, 1000, p=x) for x in choice_probs]
-        # Report frequency with which each choice occurs for the scenario
-        unique, counts_hr = np.unique(choice_out, return_counts=True)
-        # Add to count of frequency with which each DR strategy is
-        # selected
-        counts[unique] += counts_hr
-        # Add to total number of simulated hours
-        counts_denom += np.sum(counts_hr)
-    # Store summary of the percentage of simulated hours that each
-    # DR strategy was predicted to be selected in a dict
-    predict_out = {
-        "notes": (
-            "Percentage of simulations in which each candidate DR "
-            "strategy is chosen for current event"),
-        "units": "%",
-        "predictions": {
-            x: round(((y / counts_denom) * 100), 1) for
-            x, y in zip(names, counts)}
-    }
-    # Write summary dict out to JSON file
-    with open(path.join(
-            base_dir, *handyfilesvars.predict_out), "w") as jso:
-        json.dump(predict_out, jso, indent=2)
-
-def cosimulate_test(handyfilesvars, bldg_type_vint, sf):
-    cz = '3A'
-    
-    ep_dir = 'Output_EPExport_Slave'
-    fmu_dir = 'fmu_files'
-    cosim_dir = 'cosim_outputs'
-    data_dir = 'data'
-
-    bldg_file = 'Baseline_MediumOfficeDetailed_2004_' + cz
-
-    fmu_path = path.join(fmu_dir, bldg_file + '.fmu')
-
-    #predict_csv = path.join(data_dir + 'test_predict.csv')
-    update_csv = path.join(data_dir + 'test_update.csv')
-    baseline_csv = path.join(cosim_dir, bldg_file + '.csv')
-
-    
-    dt_jan1 = datetime(2006, 1, 1,1)
-    sim_days=365
-    tStart = 0
-    tStop = 3600*1*24*sim_days   ## change the timestep in EPlus to 1
-    hStep = 3600 # 60 mins
-
-    t = np.arange(tStart, tStop, hStep)
-    n_steps = len(t)
-     
-    model = load_fmu(fmu_path, log_level=7)
-    model.initialize(tStart,tStop)    
-
-
-    io_dict = {'oat':0,'orh':1,'osk':2,'pwr':3,'zat':4,'zati':5,'zcot':6,
-               'zpp':7,'zrh':8,'zpmv':9,'zlgt':10,
-               'zplg':11,'inclg':12,'inplg':13,'inlgt':14,'inven':15}
-
-    io_vals = np.empty(shape=(len(io_dict),n_steps))
-
-
-    sch_base = np.array([
-        (0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0), # ventilation
-        (15.6,15.6,15.6,15.6,15.6,21,21,21,21,21,21,21,21,21,21,21,21,15.6,15.6,15.6,15.6,15.6,15.6,15.6), # heating
-        (24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24), # cooling
-        (0.05,0.05,0.05,0.05,0.1,0.3,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9, 0.5, 0.3,0.3,0.2,0.2,0.1,0.05,0.05), # lighting
-        (0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.9,0.9,0.9,0.9,0.8,0.9,0.9,0.9,0.9,0.5,0.4,0.4,0.4,0.4,0.4,0.4,0.4)]) # plugloads
-    i = 0
-    # Main simulation loop
-    while True:
-
-        hour = int((t[i]/3600)%24)
-        io_vals[io_dict['inven']][i] = sch_base[0][hour]
-        io_vals[io_dict['inclg']][i] = sch_base[2][hour]
-        io_vals[io_dict['inlgt']][i] = sch_base[3][hour]
-        io_vals[io_dict['inplg']][i] = sch_base[4][hour]
-        
-        ###############################################################
-        model.set(['InMELsSch','InLightSch','InCoolingSch', 'InVentSch'], \
-            [io_vals[io_dict['inplg']][i],io_vals[io_dict['inlgt']][i],io_vals[io_dict['inclg']][i],io_vals[io_dict['inven']][i]])
-
-        model.do_step(current_t = t[i], step_size=hStep, new_step=True)
-
-        # Get the outputs of the simulation
-        temp_np = np.array([])
-        ppl_np = np.array([])
-        rh_np = np.array([])
-        for zoneid in range(0,34):
-            temp_np = np.append(temp_np, (model.get('ZAT_' + str(zoneid))))
-            ppl_np = np.append(ppl_np, (model.get('PEOPLE_' + str(zoneid))))
-            rh_np = np.append(rh_np, (model.get('ZRH_' + str(zoneid))))
-
-
-        #temp_wght = np.sum((temp_np * ppl_np)) / np.sum(ppl_np)
-        # ppl_wght = (np.sum(ppl_np * ppl_np) / np.sum(ppl_np)) / np.sum(ppl_np)
-        rh_wght = np.sum((rh_np * ppl_np)) / np.sum(ppl_np)
-        temp_wght = np.mean(temp_np)
-        ppl_wght = np.mean(ppl_np)
-
-
-
-        io_vals[io_dict['zat']][i] = (temp_wght * 9 / 5) + 32 #farenheit
-        io_vals[io_dict['zati']][i] = (model.get('ZAT_31') * 9 / 5) + 32
-        io_vals[io_dict['zpp']][i] = ppl_wght
-        io_vals[io_dict['zrh']][i] = rh_wght
-
-        io_vals[io_dict['zcot']][i] = model.get('ZoneCOTwo')
-        io_vals[io_dict['zpmv']][i] = model.get('ZonePMV')
-        io_vals[io_dict['zlgt']][i] = model.get('LightsEnergy') / 3600000 # kilowatt-hour
-        io_vals[io_dict['zplg']][i] = model.get('MelsEnergy') / 3600000
-        io_vals[io_dict['pwr']][i] = model.get('BldgPwr') / 1000
-
-        io_vals[io_dict['osk']][i] = model.get('OutSkyClear')
-        io_vals[io_dict['oat']][i] = (model.get('OutDrybulb') * 9 / 5) + 32 #farenheit
-        io_vals[io_dict['orh']][i] = model.get('OutRH')
-
-        i += 1
-        if (i == n_steps):
-            break
-
-    #epout_df = pd.read_csv(path.join(ep_dir,bldg_file + '.csv'), parse_dates=True)
-    hrtime = pd.date_range(start=dt_jan1, periods=8760, freq='60min').values
-    result = pd.DataFrame(data={'datetime':hrtime,'ID':21,'Vintages':'2004',
-        'Day.type':1,'Day.number':1,'Hour.number':0,'Climate.zone':cz,
-        'Demand.Power.sf.':io_vals[io_dict['pwr']],'Indoor.Temp.F.':io_vals[io_dict['zat']],'Indoor.Humid.':io_vals[io_dict['zrh']],
-        'Outdoor.Temp.F.':io_vals[io_dict['oat']],'Outdoor.Humid.':io_vals[io_dict['orh']],
-        'Outdoor.Sky.Clearness.':io_vals[io_dict['osk']],'Occ.Fraction.':io_vals[io_dict['zpp']],
-        'Cooling.Setpoint.':io_vals[io_dict['inclg']],'Lighting.Power.pct.':io_vals[io_dict['inlgt']],
-        'Ventilation.pct.':io_vals[io_dict['inven']],'MELs.pct.':io_vals[io_dict['inplg']],'Tzonei':io_vals[io_dict['zati']]
-    })
-
-    result.to_csv(baseline_csv, index=False)
 
 def cosimulate(handyfilesvars, bldg_type_vint, sf):
     # get the data of the choice strategy and store to respected schedule values
@@ -1575,7 +1351,7 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
 
     i = 0
     dt_cosim_i = 0
-   
+
     while True:
         hour = int((t[i]/3600)%24)
         day_i = int((i-hrs_cosim_start[0])/24) + 1
@@ -1591,10 +1367,12 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
 
                 #rank_strategies(handyfilesvars, bldg_type_vint, sf)
 
-                recommendations = ('data','recommendations.json')
-                with open(path.join(base_dir, *recommendations), 'r') as pred:
-                    predictions = json.load(pred)["predictions"]
+                # recommendations = ('data','recommendations.json')
+                # with open(path.join(base_dir, *recommendations), 'r') as pred:
+                #     predictions = json.load(pred)["predictions"]
 
+                recommendations = gen_recs(handyfilesvars, sf)
+                
                 max_value = max(predictions.values())
                 for key, value in predictions.items():
                     if (value == max_value):
@@ -1708,6 +1486,7 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
 
 
 def run_mod_prediction(handyfilesvars, trace, mod, dat, n_samples, inds):
+
     # Initialize variable inputs and outputs for the given model type
     iop_all = ModelIO(handyfilesvars, opts.mod_init, opts.mod_est,
                       opts.mod_assess, mod, dat)
@@ -1731,6 +1510,7 @@ def run_mod_prediction(handyfilesvars, trace, mod, dat, n_samples, inds):
             trace, samples=n_samples)
 
     return ppc
+
 
 def run_mod_assessment(handyfilesvars, trace, mod, iog, refs):
 
@@ -1769,6 +1549,7 @@ def run_mod_assessment(handyfilesvars, trace, mod, iog, refs):
     else:
         output_diagnostics(handyfilesvars, trace, iot, mod)
 
+
 def output_diagnostics(handyfilesvars, trace, iot, mod):
 
     # Posterior predictive
@@ -1806,6 +1587,7 @@ def output_diagnostics(handyfilesvars, trace, iot, mod):
         "diagnostic_plots", handyfilesvars.mod_dict[mod]["fig_names"][3])
     fig2.savefig(fig2_path)
 
+
 def from_posterior(param, samples):
 
     smin, smax = np.min(samples), np.max(samples)
@@ -1817,6 +1599,7 @@ def from_posterior(param, samples):
     x = np.concatenate([[x[0] - 3 * width], x, [x[-1] + 3 * width]])
     y = np.concatenate([[0], y, [0]])
     return pm.Interpolated(param, x, y)
+
 
 def plot_updating(handyfilesvars, param, traces, mod):
 
@@ -1851,6 +1634,7 @@ def plot_updating(handyfilesvars, param, traces, mod):
     fig_path = path.join(
         "diagnostic_plots", handyfilesvars.mod_dict[mod]["fig_names"][4])
     fig.savefig(fig_path)
+
 
 if __name__ == '__main__':
     # Handle optional user-specified execution arguments
