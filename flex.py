@@ -518,6 +518,7 @@ class ModelIO(object):
                 tmp_oaf_co2, tmp_out_tmp_delt, rh_out_tmp_delt], axis=1)
             # Set model output (Y) variable for estimation cases
             if mod_init is True or mod_est is True or mod_assess is True:
+
                 self.Y_all = data.co2['co2_in_delt']
 
         elif mod == "lighting":
@@ -748,7 +749,7 @@ def main(base_dir):
     elif opts.mod_est is True:
 
         # Set total number of model updates to execute
-        updates = 8
+        updates = 1
         # Set number of days/events per update data batch
         ndays_update = 10
         # Initialize model parameter traces across all updates, stored in list
@@ -875,7 +876,6 @@ def main(base_dir):
                 dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
             run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
             print("Complete.")
-
     elif opts.mod_cosimulate is True:
         print("Cosimulation....")
         handyfilesvars = UsefulFilesVars(
@@ -883,17 +883,376 @@ def main(base_dir):
         #cosimulate(handyfilesvars, bldg_type_vint, sf)
         cosimulate(handyfilesvars, bldg_type_vint, sf)
         print("Complete.")
-
     else:
-        # Generate predictions for a next-day DR event with conditions and
-        # candidate strategies described by an updated input file
-        # (test_predict.csv, which is loaded into handyfilesvars)
-        predict_out = gen_recs(handyfilesvars, sf)
 
-        # Write summary dict with predictions out to JSON file
+        print("Loading input data...")
+        # Read-in input data for scenario
+        dat = ModelDataLoad(
+            handyfilesvars, opts.mod_init, opts.mod_assess,
+            opts.mod_est, update=None, ndays_update=None)
+        # Set number of hours to predict across
+        n_hrs = len(np.unique(dat.hr))
+        # Find names of candidate DR strategies
+        names = np.unique(dat.strategy)
+        # Set number of DR strategies to predict across
+        n_choices = len(names)
+        # Set number of samples to draw. for predictions
+        n_samples = 1000
+        # Initialize posterior predictive data dict
+        pp_dict = {
+            key: [] for key in handyfilesvars.mod_dict.keys()}
+        # Sample noise to use in the choice model
+        rand_elem = np.random.normal(
+            loc=0, scale=1, size=(n_samples, n_choices))
+        # Initialize a numpy array that stores the count of the number of
+        # times each candidate DR strategy is selected across simulated hours
+        counts = np.zeros(n_choices)
+        # Initialize a total count to use in normalizing number of selections
+        # by strategy such that it is reported out as a % of simulated hours
+        counts_denom = 0
+
+        # Use latest set of coefficients from DCE future scenario results
+        # (Order: economic benefit, temperature, temperature precool, lighting,
+        # OAF pct delta, plug load pct delta, intercept)
+        betas_choice = np.array([
+            0.000345, -0.491951, 0.127805, -1.246971, 0.144217, -2.651832])
+        #betas_choice_c1
+        #betas_choice_c2
+
+
+        # Loop through the set of scenarios considered for FY19 EOY deliverable
+        for hr in range(n_hrs):
+            print("Making predictions for hour " + str(hr+1))
+            # Set data index that is unique to the current hour
+            inds = np.where(dat.hr == (hr+1))
+            for mod in handyfilesvars.mod_dict.keys():
+                # Reload trace
+                with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
+                        "io_data"][1]), 'rb') as store:
+                    trace = pickle.load(store)['trace']
+                pp_dict[mod] = run_mod_prediction(
+                    handyfilesvars, trace, mod, dat, n_samples, inds)
+            # Multiply change in demand/sf by sf and price delta to get total
+            # cost difference for the operator
+            cost_delt = pp_dict["demand"]['dmd'] * sf * dat.price_delt[inds]
+            # Extend oaf delta values for each choice across all samples
+            oaf_delt = np.tile(dat.oaf_delt[inds], (n_samples, 1))
+            # Extend plug load delta values for each choice across all samples
+            plug_delt = np.tile(dat.plug_delt[inds], (n_samples, 1))
+            # Extend intercept input for each choice across all samples
+            # NOTE: CURRENTLY NO INTERCEPT TERM IN DCE ANALYSIS OUTPUTS
+            # intercept = np.tile(np.ones(n_choices), (n_samples, 1))
+            # Stack all model inputs into a single array
+            # x_choice = np.stack([
+            #     cost_delt, pp_dict["temperature"]["ta"],
+            #     pp_dict["co2"]["co2"], pp_dict["lighting"]["lt"],
+            #     plug_delt, intercept])
+            x_choice = np.stack([
+                cost_delt, pp_dict["temperature"]["ta"],
+                pp_dict["temperature_precool"]["ta_pc"],
+                pp_dict["lighting"]["lt"], oaf_delt, plug_delt])
+            # Multiply model inputs by betas to yield choice logits
+            choice_logits = np.sum([x_choice[i] * betas_choice[i] for
+                                   i in range(len(x_choice))], axis=0) + \
+                rand_elem
+            # Softmax transformation of logits into choice probabilities
+            choice_probs = softmax(choice_logits, axis=1)
+            # choice_logits_c1
+            # choice_logits_c2
+
+            # choice_probs_c1
+            # choice_probs_c2
+
+            # class membership models
+            # beta_class_1  #numpy array of the number of parameters
+            # beta_class_2  #numpy array of the number of parameters
+
+            # x_class_1 #lets say 3 vars are relevant i.e. size of blg, type of blg, age of blg
+            # x_class_2 #lets say 3 vars are relevant i.e. size of blg, type of blg, age of blg
+
+            # class_logits_1 #np.sum with x_class_1
+            # class_logits_2 #np.sum with x_class_2
+
+            # class_probs_1 # = class_logits_1 / np.sum(class_logits_1, class_logits_2)
+            # class_probs_2 # = class_logits_2 / np.sum(class_logits_1, class_logits_2)
+
+            # final_choice_probs = class_probs_1 * choice_probs_c1 + class_probs_2 * choice_probs_c2
+
+            # Simulate choices across all samples given inputs and betas
+            choice_out = [
+                np.random.choice(n_choices, 1000, p=x) for x in choice_probs]
+            # Report frequency with which each choice occurs for the scenario
+            unique, counts_hr = np.unique(choice_out, return_counts=True)
+            # Add to count of frequency with which each DR strategy is
+            # selected
+            counts[unique] += counts_hr
+            # Add to total number of simulated hours
+            counts_denom += np.sum(counts_hr)
+        # Store summary of the percentage of simulated hours that each
+        # DR strategy was predicted to be selected in a dict
+        predict_out = {
+            "notes": (
+                "Percentage of simulations in which each candidate DR "
+                "strategy is chosen for current event"),
+            "units": "%",
+            "predictions": {
+                x: round(((y / counts_denom) * 100), 1) for
+                x, y in zip(names, counts)}
+        }
+        # Write summary dict out to JSON file
         with open(path.join(
                 base_dir, *handyfilesvars.predict_out), "w") as jso:
             json.dump(predict_out, jso, indent=2)
+
+
+def simBaseline(cz, baseline_csv, fmu_path, sf, sch_base, io_dict):
+    """ This function is used to collect results from  baseline runs
+    @params:
+    cz - climate zone
+    baseline_csv - path to csv file
+    fmu_path - path to the fmu format of .idf file
+    sf - square feet
+    """
+
+    # starting date
+    dt_jan1 = datetime(2006, 1, 1, 1)
+    # simulated number of days
+    sim_days=365
+    # starting simulated time
+    tStart = 0
+    # ending simulated time
+    tStop = 3600*1*24*sim_days  # change the timestep in EPlus to 1
+    # timestep
+    hStep = 3600 # 60 mins
+
+    # numpy array representationof steps
+    t = np.arange(tStart, tStop, hStep)
+    n_steps = len(t)
+    # load and initialize fmu file
+    model = load_fmu(fmu_path, log_level=7)
+    model.initialize(tStart, tStop)
+
+    io_vals = np.empty(shape=(len(io_dict), n_steps))
+
+    i = 0
+    # Main simulation loop
+    while True:
+
+        hour = int((t[i]/3600)%24)
+        io_vals[io_dict['inven']][i] = sch_base[0][hour]
+        io_vals[io_dict['inclg']][i] = sch_base[2][hour]
+        io_vals[io_dict['inlgt']][i] = sch_base[3][hour]
+        io_vals[io_dict['inplg']][i] = sch_base[4][hour]
+
+        ###############################################################
+        model.set(['InMELsSch','InLightSch','InCoolingSch', 'InVentSch'],
+                  [io_vals[io_dict['inplg']][i],io_vals[io_dict['inlgt']][i],
+                   io_vals[io_dict['inclg']][i],io_vals[io_dict['inven']][i]])
+
+        model.do_step(current_t = t[i], step_size=hStep, new_step=True)
+
+        # Get the outputs of the simulation
+        temp_np = np.array([])
+        ppl_np = np.array([])
+        rh_np = np.array([])
+        illum_np = np.array([])
+
+        for zoneid in range(0, 34):
+            temp_np = np.append(temp_np, (model.get('ZAT_' + str(zoneid))))
+            ppl_np = np.append(ppl_np, (model.get('PEOPLE_' + str(zoneid))))
+            rh_np = np.append(rh_np, (model.get('ZRH_' + str(zoneid))))
+            if zoneid < 23:
+                illum_np = np.append(illum_np, (model.get('ZNatIllum_' + str(zoneid))))
+
+        # M1 sum of people count across zones at a given hour divided by the maximum occupancy
+        ppl_frac = np.sum(ppl_np) / 354.6594
+
+        # M2 mean of people count across zones divided by the maximum people count  at a given hour
+        # ppl_frac
+
+        
+        io_vals[io_dict['zlux']][i] = np.mean(illum_np)
+        io_vals[io_dict['zluxf']][i] = sch_base[3][hour] # lighting schedule (fraction)
+        io_vals[io_dict['zat']][i] = (np.mean(temp_np) * 9 / 5) + 32 #farenheit
+        io_vals[io_dict['zati']][i] = (model.get('ZAT_31') * 9 / 5) + 32
+        io_vals[io_dict['zpp']][i] = ppl_frac
+        io_vals[io_dict['zrh']][i] = np.sum(rh_np * ppl_np) / np.sum(ppl_np)
+
+        io_vals[io_dict['zcot']][i] = model.get('ZoneCOTwo')
+        io_vals[io_dict['zpmv']][i] = model.get('ZonePMV')
+        io_vals[io_dict['zlgt']][i] = model.get('LightsEnergy') / 3600000 # kilowatt-hour
+        io_vals[io_dict['zplg']][i] = model.get('MelsEnergy') / 3600000
+        io_vals[io_dict['pwr']][i] = model.get('BldgPwr') / 1000
+
+        io_vals[io_dict['osk']][i] = model.get('OutSkyClear')
+        io_vals[io_dict['oat']][i] = (model.get('OutDrybulb') * 9 / 5) + 32 #farenheit
+        io_vals[io_dict['orh']][i] = model.get('OutRH')
+
+        # z_clg1[i] = model.get('CoolingEnergy1') / 3600000
+        # z_clg2[i] = model.get('CoolingEnergy2') / 3600000
+        # outdoor_natlt[i] = model.get('OutSkyIllum') + model.get('OutBeamIllum')
+
+        i += 1
+        if (i == n_steps):
+            break
+
+    #epout_df = pd.read_csv(path.join(ep_dir,bldg_file + '.csv'), parse_dates=True)
+    hrtime = pd.date_range(start=dt_jan1, periods=8760, freq='60min').values
+    result = pd.DataFrame(data={'datetime':hrtime,'ID':21,'Vintages':'2004',
+        'Day.type':1,'Day.number':1,'Hour.number':0,'Climate.zone':cz,
+        'Demand.Power.sf.':io_vals[io_dict['pwr']],'Indoor.Temp.F.':io_vals[io_dict['zat']],
+        'Tzonei':io_vals[io_dict['zati']],'Nat.Lt.':io_vals[io_dict['zlux']],
+        'Base.Lt.':io_vals[io_dict['zluxf']], 'Indoor.Humid.':io_vals[io_dict['zrh']],
+        'Outdoor.Temp.F.':io_vals[io_dict['oat']],'Outdoor.Humid.':io_vals[io_dict['orh']],
+        'Outdoor.Sky.Clearness.':io_vals[io_dict['osk']],
+        'Occ.Fraction.':io_vals[io_dict['zpp']],
+        'Cooling.Setpoint.':io_vals[io_dict['inclg']],'Lighting.Power.pct.':io_vals[io_dict['inlgt']],
+        'Ventilation.pct.':io_vals[io_dict['inven']],'MELs.pct.':io_vals[io_dict['inplg']]
+    })
+
+    result.to_csv(baseline_csv, index=False)
+
+
+def updatePredictionInputs(handyfilesvars, baseline_csv, hr_dr_start, hr_dr_end, hrs_rbnd):
+
+    b_df = pd.read_csv(baseline_csv, parse_dates=True)
+    p_csv = path.join(*handyfilesvars.mod_dict["temperature"]["io_data"][0])
+    p_df = pd.read_csv(p_csv).head(19)
+
+    hrs_dr = list(range(hr_dr_start, (hr_dr_end + hrs_rbnd)))
+
+    d = 1
+    # the first DR event hour as anchor
+    p_df.loc[:, 'Hr'] = d
+    p_df.loc[:, 'OAT'] = b_df.iloc[hrs_dr[d]]['Outdoor.Temp.F.']
+    p_df.loc[:, 'RH'] = b_df.iloc[hrs_dr[d]]['Outdoor.Humid.']
+    p_df.loc[:, 'Lt_Nat'] = b_df.iloc[hrs_dr[d]]['Nat.Lt.']
+    p_df.loc[:, 'Lt_Base'] = b_df.iloc[hrs_dr[d]]['Base.Lt.']
+    p_df.loc[:, 'Occ_Frac'] = b_df.iloc[hrs_dr[d]]['Occ.Fraction.']
+    p_df.loc[:, 'Delt_Price_kWh'] = 0.1
+
+    # the next DR event and rebound hours
+    for d in range(2, len(hrs_dr)):
+        t_df = p_df.copy().head(19)
+
+        t_df.loc[:, 'Hr'] = d
+        t_df.loc[:, 'OAT'] = b_df.iloc[hrs_dr[d]]['Outdoor.Temp.F.']
+        t_df.loc[:, 'RH'] = b_df.iloc[hrs_dr[d]]['Outdoor.Humid.']
+        t_df.loc[:, 'Lt_Nat'] = b_df.iloc[hrs_dr[d]]['Nat.Lt.']
+        t_df.loc[:, 'Lt_Base'] = b_df.iloc[hrs_dr[d]]['Base.Lt.']
+        t_df.loc[:, 'Occ_Frac'] = b_df.iloc[hrs_dr[d]]['Occ.Fraction.']
+        t_df.loc[:, 'Delt_Price_kWh'] = 0.1 \
+            if (d < (len(hrs_dr) - hrs_rbnd)) else 0
+        t_df.loc[:, 'h_DR_Start'] = (d - 1) \
+            if (d < (len(hrs_dr) - hrs_rbnd)) else 0
+        t_df.loc[:, 'h_DR_End'] = (d + 3 - len(hrs_dr)) \
+            if (d >= (len(hrs_dr) - hrs_rbnd)) else 0
+        t_df.loc[:, 'h_PCool_End'] = t_df.loc[:, 'h_PCool_End'] * d
+        if (d >= (len(hrs_dr) - hrs_rbnd)):
+            t_df.loc[:, 'Delt_CoolSP'] = 0
+        if (d >= (len(hrs_dr) - hrs_rbnd)):
+            t_df.loc[:, 'Delt_LgtPct'] = 0
+        if (d >= (len(hrs_dr) - hrs_rbnd)):
+            t_df.loc[:, 'Delt_OAVent_Pct'] = 0
+        if (d >= (len(hrs_dr) - hrs_rbnd)): 
+            t_df.loc[:, 'Delt_PL_Pct'] = 0
+        t_df.loc[:, 'Delt_CoolSP_Lag'] = \
+            (t_df.loc[:, 'Delt_CoolSP_Lag'] * -1) \
+            if (d == (len(hrs_dr) - hrs_rbnd)) else 0
+        t_df.loc[t_df['Name'].str.contains("Pre-cool - "), 'Delt_CoolSP_Lag'] = 0
+        t_df.loc[t_df['Name'].str.contains(" - Pre-cool"), 'Delt_CoolSP_Lag'] = \
+            (t_df.loc[t_df['Name'].str.contains("GTA - "), 'Delt_CoolSP_Lag']).tolist() \
+            if (d == (len(hrs_dr) - hrs_rbnd)) else 0
+
+        t_df.loc[:, 'Delt_LgtPct_Lag'] = \
+            (t_df.loc[:, 'Delt_LgtPct_Lag'] * -1) \
+            if (d == (len(hrs_dr) - hrs_rbnd)) else 0
+        t_df.loc[:, 'Delt_OAVent_Pct_Lag'] = \
+            (t_df.loc[:, 'Delt_OAVent_Pct_Lag'] * -1) \
+            if (d == (len(hrs_dr) - hrs_rbnd)) else 0
+        t_df.loc[:, 'Delt_PL_Pct_Lag'] = \
+            (t_df.loc[:, 'Delt_PL_Pct_Lag'] * -1) \
+            if (d == (len(hrs_dr) - hrs_rbnd)) else 0
+
+        p_df = p_df.append(t_df)
+
+    p_df.to_csv(p_csv, index=False)
+
+
+def modelUpdateInputs(cz, baseline_csv, update_csv, day_i, dt_cosim_i, io_dict, io_vals, dts_dr_start, dts_dr_end, hrs_dr_start, hrs_dr_end, hrs_rbnd):
+    # the file with Na's data at the initial, cleared, and repopulated from 
+    # Energyplus output at each DR event (per-day) and 2-hour rebound period.
+    # Run, for example, every 5 events and re-initialized with new data.
+    out_dt_dr_start = (dts_dr_start[dt_cosim_i] + timedelta(hours=1))
+    out_dt_dr_end = (dts_dr_end[dt_cosim_i] + timedelta(hours=2))
+    out_hr_dr_start = hrs_dr_start[dt_cosim_i] + 1
+    out_hr_dr_end = hrs_dr_end[dt_cosim_i] + 1 + hrs_rbnd
+
+    # print('TIME')
+    # print('dt_cosim_index {!s} out_dt_dr_start {!s} out_dt_dr_end {!s} out_hr_dr_start {!s} out_hr_dr_end {!s}'.
+    #     format(dt_cosim_index, out_dt_dr_start, out_dt_dr_end, out_hr_dr_start, out_hr_dr_end))
+    
+    #hrtime = pd.date_range(start=out_dt_dr_start, end=out_dt_dr_end, freq='60min').values
+    hrtime = pd.date_range(start=out_dt_dr_start, end=out_dt_dr_end, freq='H').to_pydatetime()
+    dr_r = np.s_[out_hr_dr_start:out_hr_dr_end]
+    update_res = pd.DataFrame(data={'datetime':hrtime,
+        'ID': 21,
+        'Vintages': '2004',
+        'Day.type': 1,
+        'Day.number': day_i,
+        'Hour.number': [x.hour for x in hrtime],
+        'Climate.zone': cz,
+        'Demand.Power.sf.': io_vals[io_dict['pwr']][dr_r],
+        'Indoor.Temp.F.': io_vals[io_dict['zat']][dr_r],
+        'Indoor.Humid.': io_vals[io_dict['zrh']][dr_r],
+        'Outdoor.Temp.F.': io_vals[io_dict['oat']][dr_r],
+        'Outdoor.Humid.': io_vals[io_dict['orh']][dr_r],
+        'Outdoor.Sky.Clearness.': io_vals[io_dict['osk']][dr_r],
+        'Occ.Fraction.': io_vals[io_dict['zpp']][dr_r],
+        'Cooling.Setpoint.': io_vals[io_dict['inclg']][dr_r],
+        'Lighting.Power.pct.': io_vals[io_dict['inlgt']][dr_r],
+        'Ventilation.pct.': io_vals[io_dict['inven']][dr_r],
+        'MELs.pct.': io_vals[io_dict['inplg']][dr_r],
+        'Since.DR.Started.': io_vals[io_dict['hdrst']][dr_r],
+        'Since.DR.Ended.': io_vals[io_dict['hdren']][dr_r],
+        'Since.Pre.cooling.Ended.': 0,
+        'Since.Pre.cooling.Started.': 0,
+        'Cooling.Setpoint.Diff.One.Step.': io_vals[io_dict['inclg_delt']][dr_r],
+        'Lighting.Power.Diff.pct.One.Step.': io_vals[io_dict['inlgt_delt']][dr_r],
+        'MELs.Power.Diff.pct.One.Step.': io_vals[io_dict['inplg_delt']][dr_r],
+        'Ventilation.Diff.pct.One.Step.': io_vals[io_dict['inven_delt']][dr_r],
+        'Pre.cooling.Temp.Increase.': 0,
+        'Pre.cooling.Duration.': 0
+    })
+
+    baseline_df = pd.read_csv(baseline_csv, parse_dates=True, index_col='datetime')
+    update_res = update_res.set_index('datetime')
+
+    update_res['Demand.Power.Diff.sf.'] = (update_res['Demand.Power.sf.'] - baseline_df['Demand.Power.sf.']) * -1
+    update_res['Indoor.Temp.Diff.F.'] = update_res['Indoor.Temp.F.'] - baseline_df['Indoor.Temp.F.']
+    update_res['Indoor.Humid.Diff.'] = update_res['Indoor.Humid.'] - baseline_df['Indoor.Humid.']
+    update_res['Cooling.Setpoint.Diff.'] = (update_res['Cooling.Setpoint.'] - baseline_df['Cooling.Setpoint.'])
+    update_res['Lighting.Power.Diff.pct.'] = (update_res['Lighting.Power.pct.'] - baseline_df['Lighting.Power.pct.'])
+    update_res['Ventilation.Diff.pct.'] = (update_res['Ventilation.pct.'] - baseline_df['Ventilation.pct.'])
+    update_res['MELs.Diff.pct.'] = (update_res['MELs.pct.'] - baseline_df['MELs.pct.']) * -1
+
+    update_res.reset_index(inplace=True)
+    update_res = update_res[[
+        'ID','Vintages','Day.type','Day.number','Hour.number',
+        'Climate.zone','Demand.Power.Diff.sf.','Indoor.Temp.Diff.F.',
+        'Indoor.Humid.Diff.','Outdoor.Temp.F.','Outdoor.Humid.',
+        'Outdoor.Sky.Clearness.','Occ.Fraction.','Cooling.Setpoint.Diff.',
+        'Lighting.Power.Diff.pct.','Ventilation.Diff.pct.',
+        'MELs.Diff.pct.','Since.DR.Started.','Since.DR.Ended.',
+        'Since.Pre.cooling.Ended.','Since.Pre.cooling.Started.',
+        'Cooling.Setpoint.Diff.One.Step.','Lighting.Power.Diff.pct.One.Step.',
+        'MELs.Power.Diff.pct.One.Step.','Ventilation.Diff.pct.One.Step.',
+        'Pre.cooling.Temp.Increase.','Pre.cooling.Duration.']]
+
+    if os.path.exists(update_csv):
+        update_res.to_csv(update_csv, mode='a', header=False, index=False)
+    else:
+        update_res.to_csv(update_csv, index=False)
 
 
 def gen_recs(handyfilesvars, sf):
@@ -1000,240 +1359,10 @@ def gen_recs(handyfilesvars, sf):
     return predict_out
 
 
-def simBaseline(cz, baseline_csv, fmu_path, sf, sch_base, io_dict):
-    """ This function is used to collect results from  baseline runs
-    @params:
-    cz - climate zone
-    baseline_csv - path to csv file
-    fmu_path - path to the fmu format of .idf file
-    sf - square feet
-    """
-
-    # starting date
-    dt_jan1 = datetime(2006, 1, 1, 1)
-    # simulated number of days
-    sim_days=365
-    # starting simulated time
-    tStart = 0
-    # ending simulated time
-    tStop = 3600*1*24*sim_days  # change the timestep in EPlus to 1
-    # timestep
-    hStep = 3600 # 60 mins
-
-    # numpy array representationof steps
-    t = np.arange(tStart, tStop, hStep)
-    n_steps = len(t)
-    # load and initialize fmu file
-    model = load_fmu(fmu_path, log_level=7)
-    model.initialize(tStart, tStop)
-
-    io_vals = np.empty(shape=(len(io_dict), n_steps))
-
-    i = 0
-    # Main simulation loop
-    while True:
-
-        hour = int((t[i]/3600)%24)
-        io_vals[io_dict['inven']][i] = sch_base[0][hour]
-        io_vals[io_dict['inclg']][i] = sch_base[2][hour]
-        io_vals[io_dict['inlgt']][i] = sch_base[3][hour]
-        io_vals[io_dict['inplg']][i] = sch_base[4][hour]
-
-        ###############################################################
-        model.set(['InMELsSch','InLightSch','InCoolingSch', 'InVentSch'],
-                  [io_vals[io_dict['inplg']][i],io_vals[io_dict['inlgt']][i],
-                   io_vals[io_dict['inclg']][i],io_vals[io_dict['inven']][i]])
-
-        model.do_step(current_t = t[i], step_size=hStep, new_step=True)
-
-        # Get the outputs of the simulation
-        temp_np = np.array([])
-        ppl_np = np.array([])
-        rh_np = np.array([])
-        illum_np = np.array([])
-
-        for zoneid in range(0, 34):
-            temp_np = np.append(temp_np, (model.get('ZAT_' + str(zoneid))))
-            ppl_np = np.append(ppl_np, (model.get('PEOPLE_' + str(zoneid))))
-            rh_np = np.append(rh_np, (model.get('ZRH_' + str(zoneid))))
-            if zoneid < 23:
-                illum_np = np.append(illum_np, (model.get('ZNatIllum_' + str(zoneid))))
-
-
-        # temp_wght = np.sum((temp_np * ppl_np)) / np.sum(ppl_np)
-        # ppl_wght = (np.sum(ppl_np * ppl_np) / np.sum(ppl_np)) / np.sum(ppl_np)
-        rh_wght = np.sum((rh_np * ppl_np)) / np.sum(ppl_np)
-        illum_wght = np.mean(illum_np)
-        temp_wght = np.mean(temp_np)
-        ppl_wght = np.mean(ppl_np)
-        io_vals[io_dict['zlux']][i] = illum_wght
-
-        io_vals[io_dict['zat']][i] = (temp_wght * 9 / 5) + 32 #farenheit
-        io_vals[io_dict['zati']][i] = (model.get('ZAT_31') * 9 / 5) + 32
-        io_vals[io_dict['zpp']][i] = ppl_wght
-        io_vals[io_dict['zrh']][i] = rh_wght
-
-        io_vals[io_dict['zcot']][i] = model.get('ZoneCOTwo')
-        io_vals[io_dict['zpmv']][i] = model.get('ZonePMV')
-        io_vals[io_dict['zlgt']][i] = model.get('LightsEnergy') / 3600000 # kilowatt-hour
-        io_vals[io_dict['zplg']][i] = model.get('MelsEnergy') / 3600000
-        io_vals[io_dict['pwr']][i] = model.get('BldgPwr') / 1000
-
-        io_vals[io_dict['osk']][i] = model.get('OutSkyClear')
-        io_vals[io_dict['oat']][i] = (model.get('OutDrybulb') * 9 / 5) + 32 #farenheit
-        io_vals[io_dict['orh']][i] = model.get('OutRH')
-
-        # z_clg1[i] = model.get('CoolingEnergy1') / 3600000
-        # z_clg2[i] = model.get('CoolingEnergy2') / 3600000
-        # outdoor_natlt[i] = model.get('OutSkyIllum') + model.get('OutBeamIllum')
-
-        i += 1
-        if (i == n_steps):
-            break
-
-    #epout_df = pd.read_csv(path.join(ep_dir,bldg_file + '.csv'), parse_dates=True)
-    hrtime = pd.date_range(start=dt_jan1, periods=8760, freq='60min').values
-    result = pd.DataFrame(data={'datetime':hrtime,'ID':21,'Vintages':'2004',
-        'Day.type':1,'Day.number':1,'Hour.number':0,'Climate.zone':cz,
-        'Demand.Power.sf.':io_vals[io_dict['pwr']],'Indoor.Temp.F.':io_vals[io_dict['zat']],
-        'Tzonei':io_vals[io_dict['zati']],'Nat.Lt.':io_vals[io_dict['zlux']],
-        'Indoor.Humid.':io_vals[io_dict['zrh']],'Outdoor.Temp.F.':io_vals[io_dict['oat']],
-        'Outdoor.Humid.':io_vals[io_dict['orh']],'Outdoor.Sky.Clearness.':io_vals[io_dict['osk']],
-        'Occ.Fraction.':io_vals[io_dict['zpp']],
-        'Cooling.Setpoint.':io_vals[io_dict['inclg']],'Lighting.Power.pct.':io_vals[io_dict['inlgt']],
-        'Ventilation.pct.':io_vals[io_dict['inven']],'MELs.pct.':io_vals[io_dict['inplg']]
-    })
-
-    result.to_csv(baseline_csv, index=False)
-
-
-def updateTestPredictCSV(handyfilesvars, baseline_csv, hr_dr_start, hr_dr_end, hrs_rbnd):
-
-    base_df = pd.read_csv(baseline_csv, parse_dates=True)
-    predict_csv = path.join(*handyfilesvars.mod_dict["temperature"]["io_data"][0])
-    predict_df = pd.read_csv(predict_csv).head(19)
-
-    hrs_dr = list(range(hr_dr_start,(hr_dr_end + hrs_rbnd)))
-
-    d = 0
-    # the first DR event hour
-    predict_df.loc[:,'Hr'] = d + 1
-    predict_df.loc[:,'OAT'] = base_df.iloc[hrs_dr[d]]['Outdoor.Temp.F.']
-    predict_df.loc[:,'RH'] = base_df.iloc[hrs_dr[d]]['Outdoor.Humid.']
-    predict_df.loc[:,'Lt_Nat'] = base_df.iloc[hrs_dr[d]]['Nat.Lt.']
-    predict_df.loc[:,'Lt_Base'] = 0
-    predict_df.loc[:,'Occ_Frac'] = base_df.iloc[hrs_dr[d]]['Occ.Fraction.']
-    predict_df.loc[:,'Delt_Price_kWh'] = 0.1
-
-    # the next DR event and rebound hours
-    for d in range(1,len(hrs_dr)):
-        temp_df = predict_df.copy().head(19)
-
-        temp_df.loc[:,'Hr'] = d + 1
-        temp_df.loc[:,'OAT'] = base_df.iloc[hrs_dr[d]]['Outdoor.Temp.F.']
-        temp_df.loc[:,'RH'] = base_df.iloc[hrs_dr[d]]['Outdoor.Humid.']
-        temp_df.loc[:,'Lt_Nat'] = base_df.iloc[hrs_dr[d]]['Nat.Lt.']
-        temp_df.loc[:,'Lt_Base'] = 0
-        temp_df.loc[:,'Occ_Frac'] = base_df.iloc[hrs_dr[d]]['Occ.Fraction.']
-        temp_df.loc[:,'Delt_Price_kWh'] = 0.1
-        temp_df.loc[:,'h_DR_Start'] = d if (d < (len(hrs_dr) - hrs_rbnd)) else 0
-        temp_df.loc[:,'h_DR_End'] = (d + 3 - len(hrs_dr)) if (d >= (len(hrs_dr) - hrs_rbnd)) else 0 #####
-        temp_df.loc[:,'h_PCool_End'] = temp_df.loc[:,'h_PCool_End'] * (d + 1)
-        if (d >= (len(hrs_dr) - hrs_rbnd)): temp_df.loc[:,'Delt_CoolSP'] = 0
-        if (d >= (len(hrs_dr) - hrs_rbnd)): temp_df.loc[:,'Delt_LgtPct'] = 0
-        if (d >= (len(hrs_dr) - hrs_rbnd)): temp_df.loc[:,'Delt_OAVent_Pct'] = 0
-        if (d >= (len(hrs_dr) - hrs_rbnd)): temp_df.loc[:,'Delt_PL_Pct'] = 0
-        temp_df.loc[:,'Delt_CoolSP_Lag'] = (temp_df.loc[:,'Delt_CoolSP_Lag'] * -1) if (d == (len(hrs_dr) - hrs_rbnd)) else 0
-        temp_df.loc[:,'Delt_LgtPct_Lag'] = (temp_df.loc[:,'Delt_LgtPct_Lag'] * -1) if (d == (len(hrs_dr) - hrs_rbnd)) else 0
-        temp_df.loc[:,'Delt_OAVent_Pct_Lag'] = (temp_df.loc[:,'Delt_OAVent_Pct_Lag'] * -1) if (d == (len(hrs_dr) - hrs_rbnd)) else 0
-        temp_df.loc[:,'Delt_PL_Pct_Lag'] = (temp_df.loc[:,'Delt_PL_Pct_Lag'] * -1) if (d == (len(hrs_dr) - hrs_rbnd)) else 0
-        if (d >= (len(hrs_dr) - hrs_rbnd)): temp_df.loc[:,'Pcool_Mag'] = 0
-        if (d >= (len(hrs_dr) - hrs_rbnd)): temp_df.loc[:,'Pcool_Dur'] = 0
-
-        predict_df = predict_df.append(temp_df)
-
-    predict_df.to_csv(predict_csv, index=False)
-
-
-def updateTestUpdateCSV(cz, baseline_csv, update_csv, day_i, dt_cosim_i, io_dict, io_vals, dts_dr_start, dts_dr_end, hrs_dr_start, hrs_dr_end, hrs_rbnd):
-    # the file with Na's data at the initial, cleared, and repopulated from 
-    # Energyplus output at each DR event (per-day) and 2-hour rebound period.
-    # Run, for example, every 5 events and re-initialized with new data.
-    out_dt_dr_start = (dts_dr_start[dt_cosim_i] + timedelta(hours=1))
-    out_dt_dr_end = (dts_dr_end[dt_cosim_i] + timedelta(hours=2))
-    out_hr_dr_start = hrs_dr_start[dt_cosim_i] + 1
-    out_hr_dr_end = hrs_dr_end[dt_cosim_i] + 1 + hrs_rbnd
-
-    # print('TIME')
-    # print('dt_cosim_index {!s} out_dt_dr_start {!s} out_dt_dr_end {!s} out_hr_dr_start {!s} out_hr_dr_end {!s}'.
-    #     format(dt_cosim_index, out_dt_dr_start, out_dt_dr_end, out_hr_dr_start, out_hr_dr_end))
-    
-    #hrtime = pd.date_range(start=out_dt_dr_start, end=out_dt_dr_end, freq='60min').values
-    hrtime = pd.date_range(start=out_dt_dr_start, end=out_dt_dr_end, freq='H').to_pydatetime()
-    dr_r = np.s_[out_hr_dr_start:out_hr_dr_end]
-    update_res = pd.DataFrame(data={'datetime':hrtime,
-        'ID': 21,
-        'Vintages': '2004',
-        'Day.type': 1,
-        'Day.number': day_i,
-        'Hour.number': [x.hour for x in hrtime],
-        'Climate.zone': cz,
-        'Demand.Power.sf.': io_vals[io_dict['pwr']][dr_r],
-        'Indoor.Temp.F.': io_vals[io_dict['zat']][dr_r],
-        'Indoor.Humid.': io_vals[io_dict['zrh']][dr_r],
-        'Outdoor.Temp.F.': io_vals[io_dict['oat']][dr_r],
-        'Outdoor.Humid.': io_vals[io_dict['orh']][dr_r],
-        'Outdoor.Sky.Clearness.': io_vals[io_dict['osk']][dr_r],
-        'Occ.Fraction.': io_vals[io_dict['zpp']][dr_r],
-        'Cooling.Setpoint.': io_vals[io_dict['inclg']][dr_r],
-        'Lighting.Power.pct.': io_vals[io_dict['inlgt']][dr_r],
-        'Ventilation.pct.': io_vals[io_dict['inven']][dr_r],
-        'MELs.pct.': io_vals[io_dict['inplg']][dr_r],
-        'Since.DR.Started.': io_vals[io_dict['hdrst']][dr_r],
-        'Since.DR.Ended.': io_vals[io_dict['hdren']][dr_r],
-        'Since.Pre.cooling.Ended.': 0,
-        'Since.Pre.cooling.Started.': 0,
-        'Cooling.Setpoint.Diff.One.Step.': io_vals[io_dict['inclg_delt']][dr_r],
-        'Lighting.Power.Diff.pct.One.Step.': io_vals[io_dict['inlgt_delt']][dr_r],
-        'MELs.Power.Diff.pct.One.Step.': io_vals[io_dict['inplg_delt']][dr_r],
-        'Ventilation.Diff.pct.One.Step.': io_vals[io_dict['inven_delt']][dr_r],
-        'Pre.cooling.Temp.Increase.': 0,
-        'Pre.cooling.Duration.': 0
-    })
-
-    baseline_df = pd.read_csv(baseline_csv, parse_dates=True, index_col='datetime')
-    update_res = update_res.set_index('datetime')
-
-    update_res['Demand.Power.Diff.sf.'] = (update_res['Demand.Power.sf.'] - baseline_df['Demand.Power.sf.']) * -1
-    update_res['Indoor.Temp.Diff.F.'] = update_res['Indoor.Temp.F.'] - baseline_df['Indoor.Temp.F.']
-    update_res['Indoor.Humid.Diff.'] = update_res['Indoor.Humid.'] - baseline_df['Indoor.Humid.']
-    update_res['Cooling.Setpoint.Diff.'] = (update_res['Cooling.Setpoint.'] - baseline_df['Cooling.Setpoint.'])
-    update_res['Lighting.Power.Diff.pct.'] = (update_res['Lighting.Power.pct.'] - baseline_df['Lighting.Power.pct.'])
-    update_res['Ventilation.Diff.pct.'] = (update_res['Ventilation.pct.'] - baseline_df['Ventilation.pct.'])
-    update_res['MELs.Diff.pct.'] = (update_res['MELs.pct.'] - baseline_df['MELs.pct.']) * -1
-
-    update_res.reset_index(inplace=True)
-    update_res = update_res[[
-        'ID','Vintages','Day.type','Day.number','Hour.number',
-        'Climate.zone','Demand.Power.Diff.sf.','Indoor.Temp.Diff.F.',
-        'Indoor.Humid.Diff.','Outdoor.Temp.F.','Outdoor.Humid.',
-        'Outdoor.Sky.Clearness.','Occ.Fraction.','Cooling.Setpoint.Diff.',
-        'Lighting.Power.Diff.pct.','Ventilation.Diff.pct.',
-        'MELs.Diff.pct.','Since.DR.Started.','Since.DR.Ended.',
-        'Since.Pre.cooling.Ended.','Since.Pre.cooling.Started.',
-        'Cooling.Setpoint.Diff.One.Step.','Lighting.Power.Diff.pct.One.Step.',
-        'MELs.Power.Diff.pct.One.Step.','Ventilation.Diff.pct.One.Step.',
-        'Pre.cooling.Temp.Increase.','Pre.cooling.Duration.']]
-
-    if os.path.exists(update_csv):
-        update_res.to_csv(update_csv, mode='a', header=False, index=False)
-    else:
-        update_res.to_csv(update_csv, index=False)
-
-
 def cosimulate(handyfilesvars, bldg_type_vint, sf):
     # get the data of the choice strategy and store to respected schedule values
-    climate_zones = ['2A','2B','3A','3B','3C','4A','4B','4C','5A','5B','5C','6A','6B','7A']
+    climate_zones = ['2A', '2B', '3A', '3B', '3C', '4A', '4B', '4C',
+                     '5A', '5B', '5C', '6A', '6B', '7A']
     # mock up test to always select climate zone 3A - Atlanta, GA
     cz = '3A'
 
@@ -1253,16 +1382,19 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
     # ending date of cosimulation
     dt_cosim_end = datetime(2006, 8, 25)
     # dates between the starting and ending of cosimulation dates
-    dts_cosim = [dt_cosim_start + timedelta(days=x) 
+    dts_cosim = [dt_cosim_start + timedelta(days=x)
                  for x in range(0, (dt_cosim_end - dt_cosim_start).days)]
     # d dictionary of  Summer peak hours
-    dr_dict = {"2A":[17,20],"2B":[17,20],"3A":[19,22],"3B":[18,21],
-        "3C":[19,22],"4A":[12,15],"4B":[17,20],"4C":[17,20],"5A":[20,23],
-        "5B":[17,20],"6A":[16,19],"6B":[17,20],"7A":[16,19]}
+    dr_dict = {
+        "2A": [17, 20], "2B": [17, 20], "3A": [19, 22], "3B": [18, 21],
+        "3C": [19, 22], "4A": [12, 15], "4B": [17, 20], "4C": [17, 20],
+        "5A": [20, 23], "5B": [17, 20], "6A": [16, 19], "6B": [17, 20],
+        "7A": [16, 19]
+    }
 
     # dts_dr_start = [datetime.combine(x, time(dr_dict[cz][0])) for x in dts_cosim]
     # dts_dr_end = [datetime.combine(x, time(dr_dict[cz][1])) for x in dts_cosim]
-   
+
     # mock up test to always select DR periods between Noon and 4pm
     dts_dr_start = [datetime.combine(x, time(12)) for x in dts_cosim]
     dts_dr_end = [datetime.combine(x, time(16)) for x in dts_cosim]
@@ -1292,7 +1424,8 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
         # E+ input to 'OfficeMedium BLDG_LIGHT_SCH_2004'
         (0.05,0.05,0.05,0.05,0.1,0.3,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9, 0.5, 0.3,0.3,0.2,0.2,0.1,0.05,0.05),
         # E+ input to 'OfficeMedium BLDG_EQUIP_SCH_2004'
-        (0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.9,0.9,0.9,0.9,0.8,0.9,0.9,0.9,0.9,0.5,0.4,0.4,0.4,0.4,0.4,0.4,0.4)])
+        (0.4,0.4,0.4,0.4,0.4,0.4,0.4,0.9,0.9,0.9,0.9,0.8,0.9,0.9,0.9,0.9,0.5,0.4,0.4,0.4,0.4,0.4,0.4,0.4)
+    ])
 
     # EnergyPlus I/O variables via FMU
     # OUTPUT VARIABLES
@@ -1308,6 +1441,7 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
     # zpmv - 'Zone Thermal Comfort Fanger Model PMV' of Top_1 zone
     # zlgt - 'Lights Electric Energy'
     # zlux - aggregate of 'Daylighting Reference Point 1 Illuminance' 22 zones
+    # zluxf - used as output 'OfficeMedium BLDG_LIGHT_SCH_2004'
     # zplg - 'Electric Equipment Electric Energy'
 
     # INPUT VARIABLES
@@ -1319,19 +1453,29 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
     # inplg_delt - difference of 'inplg' between t and t-1
     # inlgt_delt - difference of 'inlgt' between t and t-1
     # inven_delt - difference of 'inven' between t and t-1
-    # hdrst -
-    # hdren -
-    io_dict = {'oat':0,'orh':1,'osk':2,'pwr':3,'zat':4,'zati':5,'zcot':6,
-               'zpp':7,'zrh':8,'zpmv':9,'zlgt':10,'zlux':11,
-               'zplg':12,'inclg':13,'inplg':14,'inlgt':15,'inven':16,
-               'inclg_delt':17,'inplg_delt':18,'inlgt_delt':19,'inven_delt':20,
-               'hdrst':21,'hdren':22}
-                # 'zclg1':17,'zclg2':18,'zhtgsp':19,'zclgsp':20,'olux':21
+    # hdrst - hours since DR start
+    # hdren - hours since DR end
+
+    io_dict = {
+        'oat': 0, 'orh': 1, 'osk': 2, 'pwr': 3, 'zat': 4, 'zati': 5, 'zcot': 6,
+        'zpp': 7, 'zrh': 8, 'zpmv': 9, 'zlgt': 10, 'zlux': 11, 'zluxf': 12,
+        'zplg': 13, 'inclg': 14, 'inplg': 15, 'inlgt': 16, 'inven': 17,
+        'inclg_delt': 18, 'inplg_delt': 19, 'inlgt_delt': 20, 'inven_delt': 21,
+        'hdrst': 22, 'hdren': 23
+        # 'zclg1':17,'zclg2':18,'zhtgsp':19,'zclgsp':20,'olux':21
+    }
 
     # Simulate the baseline for environment data and results
-    simBaseline(cz, baseline_csv, fmu_path, sf, sch_base, io_dict)
+    #simBaseline(cz, baseline_csv, fmu_path, sf, sch_base, io_dict)
+
+    dt_cosim_i = 0
+
+    # for testing updateTestPredictCSV(...), uncomment the below line of code
+    # and comment the rest of the lines of code in this function
+    # updatePredictionInputs(handyfilesvars,baseline_csv, hrs_dr_start[dt_cosim_i], hrs_dr_end[dt_cosim_i], hrs_rebound)
+
     # simulated number of days
-    sim_days=365
+    sim_days = 365
     # starting simulated time
     tStart = 0
     # ending simulated time
@@ -1350,7 +1494,6 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
     io_vals = np.empty(shape=(len(io_dict),n_steps))
 
     i = 0
-    dt_cosim_i = 0
 
     while True:
         hour = int((t[i]/3600)%24)
@@ -1365,19 +1508,14 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
 
                 updateTestPredictCSV(handyfilesvars,baseline_csv, hrs_dr_start[dt_cosim_i], hrs_dr_end[dt_cosim_i], hrs_rebound)
 
-                #rank_strategies(handyfilesvars, bldg_type_vint, sf)
+                predictions = (gen_recs(handyfilesvars, sf))["predictions"]
 
-                # recommendations = ('data','recommendations.json')
-                # with open(path.join(base_dir, *recommendations), 'r') as pred:
-                #     predictions = json.load(pred)["predictions"]
-
-                recommendations = gen_recs(handyfilesvars, sf)
-                
                 max_value = max(predictions.values())
                 for key, value in predictions.items():
                     if (value == max_value):
                         strategy_name = key
                 print(strategy_name + "] is selected, and schedule storing is... ", end="", flush=True)
+                
                 all_strategy_data = ModelDataLoad(
                         handyfilesvars, opts.mod_init, opts.mod_assess,
                         opts.mod_est, update=None, ndays_update=None)
@@ -1417,9 +1555,7 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
                 if i > (hrs_dr_end[dt_cosim_i]) and i <= (hrs_dr_end[dt_cosim_i] + 2):
                     io_vals[io_dict['hdren']][i] = i - hrs_dr_end[dt_cosim_i]
                     if i == (hrs_dr_end[dt_cosim_i] + 2):
-                        #cosim_updatecsv(dt_cosim_i)
-                        
-                        updateTestUpdateCSV(cz, baseline_csv, update_csv, day_i, dt_cosim_i, io_dict, io_vals, dts_dr_start, dts_dr_end, hrs_dr_start, hrs_dr_end, hrs_rebound)
+                        #updateTestUpdateCSV(cz, baseline_csv, update_csv, day_i, dt_cosim_i, io_dict, io_vals, dts_dr_start, dts_dr_end, hrs_dr_start, hrs_dr_end, hrs_rebound)
                         dt_cosim_i += 1
                     if dt_cosim_i >= len(hrs_dr_start):
                         dt_cosim_i -= 1
@@ -1452,32 +1588,32 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
         temp_np = np.array([])
         ppl_np = np.array([])
         rh_np = np.array([])
+        illum_np = np.array([])
+
         for zoneid in range(0,34):
             temp_np = np.append(temp_np, (model.get('ZAT_' + str(zoneid))))
             ppl_np = np.append(ppl_np, (model.get('PEOPLE_' + str(zoneid))))
             rh_np = np.append(rh_np, (model.get('ZRH_' + str(zoneid))))
+            if zoneid < 23:
+                illum_np = np.append(illum_np, (model.get('ZNatIllum_' + str(zoneid))))
 
+        ppl_frac = np.sum(ppl_np) / 354.6594
 
-        # temp_wght = np.sum((temp_np * ppl_np)) / np.sum(ppl_np)
-        # ppl_wght = (np.sum(ppl_np * ppl_np) / np.sum(ppl_np)) / np.sum(ppl_np)
-        rh_wght = np.sum((rh_np * ppl_np)) / np.sum(ppl_np)
-
-        temp_wght = np.mean(temp_np)
-        ppl_wght = np.mean(ppl_np)
-
-        io_vals[io_dict['zat']][i] = (temp_wght * 9 / 5) + 32   #farenheit
-        io_vals[io_dict['zati']][i] = (model.get('ZAT_31'))     # * 9 / 5) + 32
-        io_vals[io_dict['zpp']][i] = ppl_wght
-        io_vals[io_dict['zrh']][i] = rh_wght
+        io_vals[io_dict['zlux']][i] = np.mean(illum_np)
+        io_vals[io_dict['zluxf']][i] = sch_base[3][hour] # lighting schedule (fraction)
+        io_vals[io_dict['zat']][i] = (np.mean(temp_np) * 9 / 5) + 32 #farenheit
+        io_vals[io_dict['zati']][i] = (model.get('ZAT_31') * 9 / 5) + 32
+        io_vals[io_dict['zpp']][i] = ppl_frac
+        io_vals[io_dict['zrh']][i] = np.sum(rh_np * ppl_np) / np.sum(ppl_np)
 
         io_vals[io_dict['zcot']][i] = model.get('ZoneCOTwo')
         io_vals[io_dict['zpmv']][i] = model.get('ZonePMV')
-        io_vals[io_dict['zlgt']][i] = model.get('LightsEnergy') / 3600000 # kwh
+        io_vals[io_dict['zlgt']][i] = model.get('LightsEnergy') / 3600000 # kilowatt-hour
         io_vals[io_dict['zplg']][i] = model.get('MelsEnergy') / 3600000
-        io_vals[io_dict['pwr']][i] = model.get('BldgPwr') / (1000 * sf)
+        io_vals[io_dict['pwr']][i] = model.get('BldgPwr') / 1000
 
         io_vals[io_dict['osk']][i] = model.get('OutSkyClear')
-        io_vals[io_dict['oat']][i] = (model.get('OutDrybulb') * 9 / 5) + 32 # F
+        io_vals[io_dict['oat']][i] = (model.get('OutDrybulb') * 9 / 5) + 32 #farenheit
         io_vals[io_dict['orh']][i] = model.get('OutRH')
 
         i += 1
@@ -1486,7 +1622,6 @@ def cosimulate(handyfilesvars, bldg_type_vint, sf):
 
 
 def run_mod_prediction(handyfilesvars, trace, mod, dat, n_samples, inds):
-
     # Initialize variable inputs and outputs for the given model type
     iop_all = ModelIO(handyfilesvars, opts.mod_init, opts.mod_est,
                       opts.mod_assess, mod, dat)
