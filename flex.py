@@ -268,7 +268,7 @@ class ModelDataLoad(object):
     """
 
     def __init__(self, handyfilesvars, mod_init, mod_assess,
-                 mod_est, update, ndays_update):
+                 mod_est, update_days):
         """Initialize class attributes."""
 
         # Initialize OAF delta, plug load delta and price delta as None
@@ -337,11 +337,9 @@ class ModelDataLoad(object):
             if mod_est is False:
                 self.hr = common_data['Hr']
                 self.strategy = common_data['Name']
-            elif mod_est is True and update is not None and \
-                    ndays_update is not None:
+            elif mod_est is True and update_days is not None:
                 day_sequence = list(
-                    range((update * ndays_update) + 1,
-                          ((update + 1) * ndays_update) + 1))
+                    range(update_days[0], update_days[1] + 1))
                 common_data = common_data[
                     np.in1d(common_data['day_num'], day_sequence)]
                 self.hr = None
@@ -359,8 +357,8 @@ class ModelDataLoad(object):
                 self.price_delt = common_data['delt_price_kwh']
                 self.pc_temp = common_data['pc_tmp_inc']
             else:
-                self.oaf_delt, self.plug_delt, self.price_delt = (
-                    None for n in range(2))
+                self.oaf_delt, self.plug_delt, self.price_delt, \
+                    self.pc_temp = (None for n in range(4))
 
 
 class ModelIO(object):
@@ -739,105 +737,28 @@ def main(base_dir):
 
     elif opts.mod_est is True:
 
-        # Set total number of model updates to execute
-        updates = 8
-        # Set number of days/events per update data batch
-        ndays_update = 10
-        # Initialize model parameter traces across all updates, stored in list
-        traces = []
-        # Loop through all model update instances and update parameter
-        # estimates in accordance with new data added with each update
-        for update in range(updates):
-            print("Loading input data...", end="", flush=True)
-            # Read-in input data
-            dat = ModelDataLoad(handyfilesvars, opts.mod_init, opts.mod_assess,
-                                opts.mod_est, update, ndays_update)
-            print("Complete.")
+        # **** THESE VARIABLES SHOULD BE REPLACED BY COSIM INPUTS ****
+        n_events = 5  # Total number of DR events expected in the cosim
+        event_start = 1  # Start event day for current update
+        event_end = 5  # End event day for current update
+        traces = {"demand": [], "temperature": []}  # Will be initialized
+        # automatically below in the cosim case; delete this for cosim
+        # *************************************************************
 
-            # Loop through model types (restrict to demand model for now)
-            for mod in handyfilesvars.mod_dict.keys():
-                print("Initializing " + mod + " sub-model variables...",
-                      end="", flush=True)
-                # Initialize variable inputs/outputs for the given model type
-                iog = ModelIO(handyfilesvars, opts.mod_init, opts.mod_est,
-                              opts.mod_assess, mod, dat)
-                # Finalize variable inputs/outputs for the given model type
-                iot = ModelIOTrain(iog, opts.mod_init, opts.mod_assess)
-                print("Complete.")
-
-                # Perform model inference
-                with pm.Model() as var_mod:
-                    # For the first update, reload existing trace from model
-                    # initialization run
-                    if update == 0:
-                        print("Loading " + mod + " sub-model...", end="",
-                              flush=True)
-                        with open(
-                            path.join(base_dir, *handyfilesvars.mod_dict[mod][
-                                "io_data"][1]), 'rb') as store:
-                            trace = pickle.load(store)['trace']
-                            traces = [trace]
-                        print("Complete.")
-                    print("Setting " + mod +
-                          " sub-model priors and likelihood...",
-                          end="", flush=True)
-                    # Pull beta trace and set shorthand name
-                    t_params = trace[
-                        handyfilesvars.mod_dict[mod]["var_names"][0]]
-                    # Determine means and standard deviation of normal
-                    # distributions for each beta parameter in the trace
-                    params_mean = t_params.mean(axis=0)
-                    params_sd = t_params.std(axis=0)
-                    # Set beta priors based on beta posteriors from last
-                    # iteration
-                    params = pm.Normal(
-                        handyfilesvars.mod_dict[mod]["var_names"][0],
-                        params_mean, params_sd,
-                        shape=(iot.X.shape[1]))
-                    # Set a prior for the model error term using a kernel
-                    # density estimation on the posterior error trace (
-                    # as the posterior for this term has an unknown
-                    # distribution)
-                    sd = from_posterior(
-                        handyfilesvars.mod_dict[mod]["var_names"][1], trace[
-                            handyfilesvars.mod_dict[mod]["var_names"][1]])
-                    # Likelihood of outcome estimator
-                    est = pm.math.dot(iot.X, params)
-                    # Likelihood of outcome
-                    var = pm.Normal(
-                        handyfilesvars.mod_dict[mod]["var_names"][2],
-                        mu=est, sd=sd, observed=iot.Y)
-                    print("Complete.")
-                    # Draw posterior samples
-                    trace = pm.sample(chains=2, cores=1, init="advi")
-                    # Append current updates' traces to the traces from
-                    # all previous updates
-                    traces.append(trace)
-
+        # Initialize blank traces lists for the first update to each mod type
+        if event_start == 1:
+            traces = {"demand": [], "temperature": []}
+        # Loop through model types to update (demand and temperature)
+        for mod in ["demand", "temperature"]:
+            traces[mod] = gen_updates(
+                handyfilesvars, event_start, event_end, opts, mod, traces[mod])
             # After the last update, generate some diagnostic plots showing
             # how parameter estimates evolved across all updates
-            if update == (updates - 1):
+            if event_end == n_events:
                 plot_updating(
                     handyfilesvars,
-                    handyfilesvars.mod_dict[mod]["var_names"][0], traces, mod)
-
-            # # Store model, trace, and predictor variables
-            # with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
-            #         "io_data"][1]), 'wb') as co_s:
-            #     print("Writing out " + mod + " sub-model...",
-            #           end="", flush=True)
-            #     pickle.dump({'trace': trace, 'model': var_mod}, co_s)
-
-            # If model assessment is desired, generate diagnostic plots
-            if opts.mod_assess is True:
-                print("Starting " + mod + " sub-model assessment...", end="",
-                      flush=True)
-                # Set reference coefficient values, estimated using a
-                # frequentist regression approach
-                refs = list(
-                    dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
-                run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
-                print("Complete.")
+                    handyfilesvars.mod_dict[mod]["var_names"][0],
+                    traces[mod], mod)
 
     elif opts.mod_assess is True:
 
@@ -879,6 +800,97 @@ def main(base_dir):
             json.dump(predict_out, jso, indent=2)
 
 
+def gen_updates(
+        handyfilesvars, event_start, event_end, opts, mod, traces):
+
+    print("Loading input data...", end="", flush=True)
+    # Set start and end event information for current update
+    update_days = [event_start, event_end]
+    # Read-in input data
+    dat = ModelDataLoad(handyfilesvars, opts.mod_init, opts.mod_assess,
+                        opts.mod_est, update_days)
+    print("Complete.")
+
+    print("Initializing " + mod + " sub-model variables...",
+          end="", flush=True)
+    # Initialize variable inputs/outputs for the given model type
+    iog = ModelIO(handyfilesvars, opts.mod_init, opts.mod_est,
+                  opts.mod_assess, mod, dat)
+    # Finalize variable inputs/outputs for the given model type
+    iot = ModelIOTrain(iog, opts.mod_init, opts.mod_assess)
+    print("Complete.")
+
+    # Perform model inference
+    with pm.Model() as var_mod:
+        # For the first update, reload existing trace from model
+        # initialization run
+        if len(traces) == 0:
+            print("Loading " + mod + " sub-model...", end="",
+                  flush=True)
+            with open(
+                path.join(base_dir, *handyfilesvars.mod_dict[mod][
+                    "io_data"][1]), 'rb') as store:
+                trace = pickle.load(store)['trace']
+                traces = [trace]
+            print("Complete.")
+        print("Setting " + mod +
+              " sub-model priors and likelihood...",
+              end="", flush=True)
+        # Pull out the latest trace for use as prior information
+        trace_prior = traces[-1]
+        # Pull beta trace and set shorthand name
+        t_params = trace_prior[
+            handyfilesvars.mod_dict[mod]["var_names"][0]]
+        # Determine means and standard deviation of normal
+        # distributions for each beta parameter in the trace
+        params_mean = t_params.mean(axis=0)
+        params_sd = t_params.std(axis=0)
+        # Set beta priors based on beta posteriors from last
+        # iteration
+        params = pm.Normal(
+            handyfilesvars.mod_dict[mod]["var_names"][0],
+            params_mean, params_sd,
+            shape=(iot.X.shape[1]))
+        # Set a prior for the model error term using a kernel
+        # density estimation on the posterior error trace (
+        # as the posterior for this term has an unknown
+        # distribution)
+        sd = from_posterior(
+            handyfilesvars.mod_dict[mod]["var_names"][1], trace_prior[
+                handyfilesvars.mod_dict[mod]["var_names"][1]])
+        # Likelihood of outcome estimator
+        est = pm.math.dot(iot.X, params)
+        # Likelihood of outcome
+        var = pm.Normal(
+            handyfilesvars.mod_dict[mod]["var_names"][2],
+            mu=est, sd=sd, observed=iot.Y)
+        print("Complete.")
+        # Draw posterior samples to yield a new trace
+        trace = pm.sample(chains=2, cores=1, init="advi")
+        # Append current updates' traces to the traces from
+        # all previous updates
+        traces.append(trace)
+
+    # Store model, trace, and predictor variables
+    # with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
+    #         "io_data"][1]), 'wb') as co_s:
+    #     print("Writing out " + mod + " sub-model...",
+    #           end="", flush=True)
+    #     pickle.dump({'trace': trace, 'model': var_mod}, co_s)
+    # If model assessment is desired, generate diagnostic plots
+    if opts.mod_assess is True:
+        print("Starting " + mod + " sub-model assessment...", end="",
+              flush=True)
+        # Set reference coefficient values, estimated using a
+        # frequentist regression approach
+        refs = list(
+            dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
+        run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
+        print("Complete.")
+
+    return traces
+
+
 def gen_recs(handyfilesvars, sf):
 
     # Notify user of input data read
@@ -886,11 +898,13 @@ def gen_recs(handyfilesvars, sf):
     # Read-in input data for scenario
     dat = ModelDataLoad(
         handyfilesvars, opts.mod_init, opts.mod_assess,
-        opts.mod_est, update=None, ndays_update=None)
+        opts.mod_est, update_days=None)
     # Set number of hours to predict across
     n_hrs = len(np.unique(dat.hr))
-    # Find names of candidate DR strategies
-    names = dat.strategy[np.where(dat.hr == 1)]
+    # Find names of candidate DR strategies - ***add null option***
+    names = np.append(dat.strategy[np.where(dat.hr == 1)],
+                      "Baseline - Do Nothing")
+    # names = dat.strategy[np.where(dat.hr == 1)]
     # Set number of DR strategies to predict across
     n_choices = len(names)
     # Set number of samples to draw. for predictions
@@ -924,7 +938,7 @@ def gen_recs(handyfilesvars, sf):
         print("Making predictions for hour " + str(hr+1))
         # Set data index that is unique to the current hour
         inds = np.where(dat.hr == (hr+1))
-        for mod in handyfilesvars.mod_dict.keys():
+        for mod in ["demand", "temperature", "lighting"]:
             # Reload trace
             with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
                     "io_data"][1]), 'rb') as store:
@@ -949,9 +963,13 @@ def gen_recs(handyfilesvars, sf):
         #     cost_delt, pp_dict["temperature"]["ta"],
         #     pp_dict["co2"]["co2"], pp_dict["lighting"]["lt"],
         #     plug_delt, intercept])
-        x_choice = np.stack([
+        x_choice_nobase = np.stack([
             cost_delt, pp_dict["temperature"]["ta"],
             pc_temp, pp_dict["lighting"]["lt"], oaf_delt, plug_delt])
+        x_choice = np.array([[[
+            np.append(x_choice_nobase[z][y], 0) for y in range(
+                len(x_choice_nobase[z]))] for z in range(
+            len(x_choice_nobase))]][0])
         # Multiply model inputs by betas to yield choice logits
         choice_logits = np.sum([x_choice[i] * betas_choice[i] for
                                i in range(len(x_choice))], axis=0) + \
