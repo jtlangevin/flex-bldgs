@@ -20,7 +20,7 @@ import os
 
 # -- Project information -----------------------------------------------------
 
-project = u'Flexible Buildings'
+project = u'FlexAssist'
 copyright = u'2018, Jared Langevin'
 author = u'Jared Langevin'
 
@@ -115,7 +115,7 @@ html_static_path = ['_static']
 # -- Options for HTMLHelp output ---------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'FlexibleBuildingsdoc'
+htmlhelp_basename = 'FlexAssistdoc'
 
 
 # -- Options for LaTeX output ------------------------------------------------
@@ -142,7 +142,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'FlexibleBuildings.tex', u'Flexible Buildings Documentation',
+    (master_doc, 'FlexAssist.tex', u'FlexAssist Documentation',
      u'Jared Langevin', 'manual'),
 ]
 
@@ -152,7 +152,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'flexiblebuildings', u'Flexible Buildings Documentation',
+    (master_doc, 'FlexAssist', u'FlexAssist Documentation',
      [author], 1)
 ]
 
@@ -163,8 +163,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'FlexibleBuildings', u'Flexible Buildings Documentation',
-     author, 'FlexibleBuildings', 'One line description of project.',
+    (master_doc, 'FlexAssist', u'FlexAssist Documentation',
+     author, 'FlexAssist', 'One line description of project.',
      'Miscellaneous'),
 ]
 

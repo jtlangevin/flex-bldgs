@@ -901,10 +901,8 @@ def gen_recs(handyfilesvars, sf):
         opts.mod_est, update_days=None)
     # Set number of hours to predict across
     n_hrs = len(np.unique(dat.hr))
-    # Find names of candidate DR strategies - ***add null option***
-    names = np.append(dat.strategy[np.where(dat.hr == 1)],
-                      "Baseline - Do Nothing")
-    # names = dat.strategy[np.where(dat.hr == 1)]
+    # Find names of candidate DR strategies
+    names = dat.strategy[np.where(dat.hr == 1)]
     # Set number of DR strategies to predict across
     n_choices = len(names)
     # Set number of samples to draw. for predictions
@@ -912,6 +910,11 @@ def gen_recs(handyfilesvars, sf):
     # Initialize posterior predictive data dict
     pp_dict = {
         key: [] for key in handyfilesvars.mod_dict.keys()}
+    # Initialize dict for storing demand/cost/service predictions for each
+    # hour in the analysis
+    ds_dict_prep = {
+        "demand": [], "cost": [], "temperature": [], "temperature precool": [],
+        "lighting": [], "outdoor air": [], "plug loads": []}
     # Sample noise to use in the choice model
     rand_elem = np.random.normal(
         loc=0, scale=1, size=(n_samples, n_choices))
@@ -926,11 +929,11 @@ def gen_recs(handyfilesvars, sf):
     # (Order: economic benefit, temperature, temperature precool, lighting,
     # OAF pct delta, plug load pct delta)
 
-    # ORIGINAL
+    # ORIGINAL DCE coefficients
     # betas_choice = np.array([
     #     0.000345, -0.491951, 0.127805, -1.246971, 0.144217, -2.651832])
 
-    # UPDATED
+    # UPDATED DCE coefficients
     betas_choice = np.array([0.025, -0.31, 0.14, -1.4, 0.05, 0.26])
 
     # Loop through all hours considered for the event (event plus rebound)
@@ -955,48 +958,108 @@ def gen_recs(handyfilesvars, sf):
         plug_delt = np.tile(dat.plug_delt[inds], (n_samples, 1))
         # Extend pre-cooling values for each choice across all samples
         pc_temp = np.tile(dat.pc_temp[inds], (n_samples, 1))
-        # Extend intercept input for each choice across all samples
-        # NOTE: CURRENTLY NO INTERCEPT TERM IN DCE ANALYSIS OUTPUTS
-        # intercept = np.tile(np.ones(n_choices), (n_samples, 1))
-        # Stack all model inputs into a single array
-        # x_choice = np.stack([
-        #     cost_delt, pp_dict["temperature"]["ta"],
-        #     pp_dict["co2"]["co2"], pp_dict["lighting"]["lt"],
-        #     plug_delt, intercept])
-        x_choice_nobase = np.stack([
-            cost_delt, pp_dict["temperature"]["ta"],
-            pc_temp, pp_dict["lighting"]["lt"], oaf_delt, plug_delt])
-        x_choice = np.array([[[
-            np.append(x_choice_nobase[z][y], 0) for y in range(
-                len(x_choice_nobase[z]))] for z in range(
-            len(x_choice_nobase))]][0])
-        # Multiply model inputs by betas to yield choice logits
-        choice_logits = np.sum([x_choice[i] * betas_choice[i] for
-                               i in range(len(x_choice))], axis=0) + \
-            rand_elem
-        # Softmax transformation of logits into choice probabilities
-        choice_probs = softmax(choice_logits, axis=1)
-        # Simulate choices across all samples given inputs and betas
-        choice_out = [
-            np.random.choice(n_choices, 1000, p=x) for x in choice_probs]
-        # Report frequency with which each choice occurs for the scenario
-        unique, counts_hr = np.unique(choice_out, return_counts=True)
-        # Add to count of frequency with which each DR strategy is
-        # selected
-        counts[unique] += counts_hr
-        # Add to total number of simulated hours
-        counts_denom += np.sum(counts_hr)
+
+        # Store hourly predictions of changes in demand, cost, and services
+        # Predicted change in demand
+        ds_dict_prep["demand"].append(pp_dict["demand"]['dmd'])
+        # Predicted change in economic benefit
+        ds_dict_prep["cost"].append(cost_delt)
+        # Predicted change in temperature (pre-cooling hour)
+        ds_dict_prep["temperature"].append(pp_dict["temperature"]["ta"])
+        # Predicted change in temperature (event hour)
+        ds_dict_prep["temperature precool"].append(pc_temp)
+        # Predicted change in lighting
+        ds_dict_prep["lighting"].append(pp_dict["lighting"]["lt"])
+        # Predicted change in outdoor air ventilation fraction
+        ds_dict_prep["outdoor air"].append(oaf_delt)
+        # Predicted change in plug loads
+        ds_dict_prep["plug loads"].append(plug_delt)
+
+    # Initialize a dict to use in storing final demand/cost/service predictions
+    # (e.g., the predictions across all hours in the event that are fed into
+    # the discrete choice model), as well as final choice probabilities
+    ds_dict_fin = {
+        "demand": [], "cost": [], "temperature": [], "temperature precool": [],
+        "lighting": [], "outdoor air": [], "plug loads": [],
+        "choice probabilities": []}
+    # Loop through all variable keys in the final predictions dict and update
+    # the final predictions data
+    for key in ds_dict_fin.keys():
+        # For economic benefit predictions, sum all the predicted changes in
+        # costs across all hours in the analysis (stored in the prep dict)
+        if key == "cost":
+            # Loop through all hours of cost data stored in the prep dict and
+            # add to the total economic benefit variable
+            for ind, elem in enumerate(ds_dict_prep[key]):
+                # If first hour, initialize the change in cost data
+                if ind == 0:
+                    ds_dict_fin[key] = elem
+                # If after the first hour, add to the change in cost data
+                else:
+                    ds_dict_fin[key] = np.add(ds_dict_fin[key], elem)
+        # For predictions that do not concern economic benefits or choice
+        # probabilities (e.g., change in demand, temperature, lighting,
+        # outdoor air, and plug loads), pull the max median predicted change
+        # in these variables from the prep dict, across all simulated hours
+        elif key != "choice probabilities":
+            # Initialize list for storing the median predicted change in the
+            # variable for the given hour represented by the the prep dict data
+            medians = []
+            # Loop through all hours of data stored in the prep dict and
+            # append median values of the data for each hour to the median list
+            for elem in ds_dict_prep[key]:
+                medians.append(np.median(elem))
+            # Find the hour in which the predicted median value of the variable
+            # is at its maximum
+            max_median = np.where(medians == max(medians))[0][0]
+            # Add data from the max hour only to the final predictions dict
+            ds_dict_fin[key] = ds_dict_prep[key][max_median]
+        # For choice probability data, do nothing here
+        else:
+            pass
+    # Stack all model inputs into a single array for use in the DCE function
+    x_choice = np.stack([
+        ds_dict_fin["cost"], ds_dict_fin["temperature"],
+        ds_dict_fin["temperature precool"], ds_dict_fin["lighting"],
+        ds_dict_fin["outdoor air"], ds_dict_fin["plug loads"]])
+    # Multiply model inputs by DCE betas to yield choice logits
+    choice_logits = np.sum([x_choice[i] * betas_choice[i] for
+                           i in range(len(x_choice))], axis=0) + \
+        rand_elem
+    # Softmax transformation of logits into choice probabilities
+    choice_probs = softmax(choice_logits, axis=1)
+    # print(len(choice_probs), len(choice_probs[0]))
+    for n in range(len(choice_probs)):
+        ds_dict_fin["choice probabilities"].append(choice_probs[n])
+    # Simulate choices across all samples given inputs and betas
+    choice_out = [
+        np.random.choice(n_choices, 1000, p=x) for x in choice_probs]
+    # Report frequency with which each choice occurs for the scenario
+    unique, counts_hr = np.unique(choice_out, return_counts=True)
+    # Add to count of frequency with which each DR strategy is
+    # selected
+    counts[unique] += counts_hr
+    # Add to total number of simulated hours
+    counts_denom += np.sum(counts_hr)
+
     # Store summary of the percentage of simulated hours that each
-    # DR strategy was predicted to be selected in a dict
+    # DR strategy was predicted to be selected in a dict; also store the final
+    # set of input data for the DCE model in this dict, and the predicted
+    # choice probability outputs from the DCE
     predict_out = {
         "notes": (
-            "Percentage of simulations in which each candidate DR "
-            "strategy is chosen for current event"),
-        "units": "%",
+            "'predictions' key values represent the percentage of simulations "
+            "in which each candidate DR strategy is chosen for current event; "
+            "'input output data' key values report the full set of input data "
+            "used to generate predicted choice probabilities, as well as the "
+            "predicted choice probability outputs themselves"),
         "predictions": {
             x: round(((y / counts_denom) * 100), 1) for
-            x, y in zip(names, counts)}
-    }
+            x, y in zip(names, counts)},
+        "input output data": {key: {
+            names[x]: list(np.transpose(ds_dict_fin[key])[x]) for
+            x in range(len(names))} for key in ds_dict_fin.keys()}
+        }
 
     return predict_out
 
