@@ -32,7 +32,8 @@ class UsefulFilesVars(object):
 
         # Initialize all data input variables as None
         dmd_tmp_dat, co2_dat, stored_tmp, stored_dmd, \
-            stored_co2, lgt_dat, stored_lt = (None for n in range(7))
+            stored_co2, lgt_dat, stored_lt, pc_tmp_dmd_dat, stored_pc_tmp, \
+            stored_pc_dmd = (None for n in range(10))
 
         # Set data input and output files for all models
         if bldg_type_vint == "mediumofficenew":
@@ -43,18 +44,19 @@ class UsefulFilesVars(object):
             if mod_init is True or mod_assess is True:
                 dmd_tmp_dat = ("data", "MO_DR_new.csv")
                 co2_dat = ("data", "CO2_MO.csv")
-                pc_tmp_dat = ("data", "MO_Precooling_new.csv")
+                pc_tmp_dmd_dat = ("data", "MO_Precooling_new.csv")
             elif mod_est is True:
-                dmd_tmp_dat, co2_dat, pc_tmp_dat = (
+                dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_update.csv") for n in range(3))
             else:
-                dmd_tmp_dat, co2_dat, pc_tmp_dat = (
+                dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_predict.csv") for n in range(3))
             # Set stored model data files
             stored_tmp = ("model_stored", "tmp_mo_n.pkl")
             stored_dmd = ("model_stored", "dmd_mo_n.pkl")
             stored_co2 = ("model_stored", "co2_mo.pkl")
-            stored_pc_tmp = ("model_stored", "pc_mo_n.pkl")
+            stored_pc_tmp = ("model_stored", "pc_tmp_mo_n.pkl")
+            stored_pc_dmd = ("model_stored", "pc_dmd_mo_n.pkl")
             # Regression coefficients
             self.coefs = ("data", "coefs_mo_n.csv")
         # Medium office, <2004 vintage
@@ -62,17 +64,18 @@ class UsefulFilesVars(object):
             if mod_init is True or mod_assess is True:
                 dmd_tmp_dat = ("data", "MO_DR_old.csv")
                 co2_dat = ("data", "CO2_MO.csv")
-                pc_tmp_dat = ("data", "MO_Precooling_old.csv")
+                pc_tmp_dmd_dat = ("data", "MO_Precooling_old.csv")
             elif mod_est is True:
-                dmd_tmp_dat, co2_dat, pc_tmp_dat = (
+                dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_update.csv") for n in range(3))
             else:
-                dmd_tmp_dat, co2_dat, pc_tmp_dat = (
+                dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_predict.csv") for n in range(3))
             stored_tmp = ("model_stored", "tmp_mo_o.pkl")
             stored_dmd = ("model_stored", "dmd_mo_o.pkl")
             stored_co2 = ("model_stored", "co2_mo.pkl")
-            stored_pc_tmp = ("model_stored", "pc_mo_o.pkl")
+            stored_pc_tmp = ("model_stored", "pc_tmp_mo_o.pkl")
+            stored_pc_dmd = ("model_stored", "pc_dmd_mo_o.pkl")
             # Regression coefficients
             self.coefs = ("data", "coefs_mo_o.csv")
         # Retail, >=2004 vintage
@@ -80,17 +83,18 @@ class UsefulFilesVars(object):
             if mod_init is True or mod_assess is True:
                 dmd_tmp_dat = ("data", "Retail_DR_new.csv")
                 co2_dat = ("data", "CO2_Retail.csv")
-                pc_tmp_dat = ("data", "Retail_Precooling_new.csv")
+                pc_tmp_dmd_dat = ("data", "Retail_Precooling_new.csv")
             elif mod_est is True:
-                dmd_tmp_dat, co2_dat, pc_tmp_dat = (
+                dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_update.csv") for n in range(3))
             else:
-                dmd_tmp_dat, co2_datm, pc_tmp_dat = (
+                dmd_tmp_dat, co2_datm, pc_tmp_dmd_dat = (
                     ("data", "test_predict.csv") for n in range(3))
             stored_tmp = ("model_stored", "tmp_ret_n.pkl")
             stored_dmd = ("model_stored", "dmd_ret_n.pkl")
             stored_co2 = ("model_stored", "co2_ret.pkl")
-            stored_pc_tmp = ("model_stored", "pc_ret_n.pkl")
+            stored_pc_tmp = ("model_stored", "pc_tmp_ret_n.pkl")
+            stored_pc_dmd = ("model_stored", "pc_dmd_ret_n.pkl")
             # Regression coefficients
             self.coefs = ("data", "coefs_ret_n.csv")
         # Medium office, <2004 vintage
@@ -98,17 +102,18 @@ class UsefulFilesVars(object):
             if mod_init is True or mod_assess is True:
                 dmd_tmp_dat = ("data", "Retail_DR_old.csv")
                 co2_dat = ("data", "CO2_Retail.csv")
-                pc_tmp_dat = ("data", "Retail_Precooling_old.csv")
+                pc_tmp_dmd_dat = ("data", "Retail_Precooling_old.csv")
             elif mod_est is True:
-                dmd_tmp_dat, co2_dat, pc_tmp_dat = (
+                dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_update.csv") for n in range(3))
             else:
-                dmd_tmp_dat, co2_dat, pc_tmp_dat = (
+                dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_predict.csv") for n in range(3))
             stored_tmp = ("model_stored", "tmp_ret_o.pkl")
             stored_dmd = ("model_stored", "dmd_ret_o.pkl")
             stored_co2 = ("model_stored", "co2_ret.pkl")
-            stored_pc_tmp = ("model_stored", "pc_ret_o.pkl")
+            stored_pc_tmp = ("model_stored", "pc_tmp_ret_o.pkl")
+            stored_pc_dmd = ("model_stored", "pc_dmd_ret_o.pkl")
             # Regression coefficients
             self.coefs = ("data", "coefs_ret_o.csv")
         # Lighting models are not broken out by building type/vintage
@@ -145,7 +150,7 @@ class UsefulFilesVars(object):
                 ('id', 'lt_in_delt_pct', 'lt_in_delt', 'hour', 'lt_nat',
                  'cloud_out', 'hrs_since_dr_st', 'lt_pwr_delt', 'base_lt_frac',
                  'lt_pwr_delt_pct'), (['<i4'] * 1 + ['<f8'] * 9)]
-            pc_tmp_names_dtypes = [
+            pc_tmp_dmd_names_dtypes = [
                 ('id', 'vintage', 'day_typ', 'hour', 'climate',
                  'dmd_delt_sf', 't_in_delt', 'rh_in_delt', 't_out', 'rh_out',
                  'cloud_out', 'occ_frac', 'tsp_delt', 'lt_pwr_delt_pct',
@@ -156,12 +161,12 @@ class UsefulFilesVars(object):
                 (['<i4'] * 4 + ['<U25'] + ['<f8'] * 19)]
             self.coef_names_dtypes = [
                 ('demand', 'temperature', 'co2', 'lighting',
-                 'temperature_precool'), (['<f8'] * 5)]
+                 'temperature_precool', 'demand_precool'), (['<f8'] * 6)]
         # Set data input file column names and data types for model
         # re-estimation; these will be the same across models
         elif mod_est is True:
             tmp_dmd_names_dtypes, co2_names_dtypes, lt_names_dtypes, \
-                pc_tmp_names_dtypes = (
+                pc_tmp_dmd_names_dtypes = (
                     [('id', 'vintage', 'day_typ', 'day_num', 'hour', 'climate',
                       'dmd_delt_sf', 't_in_delt', 'rh_in_delt', 't_out',
                       'rh_out', 'cloud_out', 'occ_frac', 'tsp_delt',
@@ -178,9 +183,9 @@ class UsefulFilesVars(object):
         # prediction; these will be the same across models
         else:
             tmp_dmd_names_dtypes, co2_names_dtypes, lt_names_dtypes, \
-                pc_tmp_names_dtypes = ([(
+                pc_tmp_dmd_names_dtypes = ([(
                     'Name', 'Hr', 't_out', 'rh_out', 'lt_nat',
-                    'occ_frac', 'base_lt_frac', 'delt_price_kwh',
+                    'base_lt_frac', 'occ_frac', 'delt_price_kwh',
                     'hrs_since_dr_st',
                     'hrs_since_dr_end', 'hrs_since_pc_st',
                     'hrs_since_pc_end', 'tsp_delt', 'lt_pwr_delt_pct',
@@ -232,13 +237,22 @@ class UsefulFilesVars(object):
                     "update_lt.png"]
             },
             "temperature_precool": {
-                "io_data": [pc_tmp_dat, stored_pc_tmp],
-                "io_data_names": pc_tmp_names_dtypes,
+                "io_data": [pc_tmp_dmd_dat, stored_pc_tmp],
+                "io_data_names": pc_tmp_dmd_names_dtypes,
                 "var_names": ['ta_pc_params', 'ta_pc_sd', 'ta_pc'],
                 "fig_names": [
                     "traceplots_tmp_pc.png", "postplots_tmp_pc.png",
                     "ppcheck_tmp_pc.png", "scatter_tmp_pc.png",
                     "update_tmp_pc.png"]
+            },
+            "demand_precool": {
+                "io_data": [pc_tmp_dmd_dat, stored_pc_dmd],
+                "io_data_names": pc_tmp_dmd_names_dtypes,
+                "var_names": ['dmd_pc_params', 'dmd_pc_sd', 'dmd_pc'],
+                "fig_names": [
+                    "traceplots_dmd_pc.png", "postplots_dmd_pc.png",
+                    "ppcheck_dmd_pc.png", "scatter_dmd_pc.png",
+                    "update_dmd_pc.png"]
             }
 
         }
@@ -264,6 +278,9 @@ class ModelDataLoad(object):
             in model prediction.
         hr (numpy ndarray): Hours covered by model prediction input data
         strategy (numpy ndarray): Names of strategies to make predictions for.
+        pc_active (numpy ndarray): Data used to determine whether a given
+            pre-cooling strategy is active in a given pre-cooling period hour
+            (will be zero when it is not)
 
     """
 
@@ -301,8 +318,8 @@ class ModelDataLoad(object):
                 skip_header=True, delimiter=',',
                 names=handyfilesvars.mod_dict["lighting"]["io_data_names"][0],
                 dtype=handyfilesvars.mod_dict["lighting"]["io_data_names"][1])
-            # Read in data for initializing temperature pre-cooling model
-            self.pc_tmp = np.genfromtxt(
+            # Read in data for initializing demand/temperature pre-cool model
+            self.pc_dmd_tmp = np.genfromtxt(
                 path.join(base_dir,
                           *handyfilesvars.mod_dict[
                             "temperature_precool"]["io_data"][0]),
@@ -313,7 +330,7 @@ class ModelDataLoad(object):
                     "temperature_precool"]["io_data_names"][1])
             # Stop routine if files were not properly read in
             if any([len(x) == 0 for x in [
-                    self.dmd_tmp, self.co2, self.lt, self.pc_tmp]]):
+                    self.dmd_tmp, self.co2, self.lt, self.pc_dmd_tmp]]):
                 raise ValueError("Failure to read input file(s)")
             self.coefs = np.genfromtxt(
                 path.join(base_dir, *handyfilesvars.coefs),
@@ -337,6 +354,7 @@ class ModelDataLoad(object):
             if mod_est is False:
                 self.hr = common_data['Hr']
                 self.strategy = common_data['Name']
+                self.pc_active = common_data['hrs_since_pc_st']
             elif mod_est is True and update_days is not None:
                 day_sequence = list(
                     range(update_days[0], update_days[1] + 1))
@@ -344,21 +362,22 @@ class ModelDataLoad(object):
                     np.in1d(common_data['day_num'], day_sequence)]
                 self.hr = None
                 self.strategy = None
+                self.pc_active = None
             # Set inputs to demand, temperature, co2, and lighting models
             # from prediction input file
-            self.dmd_tmp, self.co2, self.lt, self.pc_tmp = (
+            self.dmd_tmp, self.co2, self.lt, self.pc_dmd_tmp = (
                 common_data for n in range(4))
 
-            # Set plug load delta and price delta to values from prediction
-            # input file (these are not predicted via a Bayesian model)
+            # Set outdoor air fraction delta, plug load delta and price
+            # delta to values from prediction input file (these are not
+            # predicted via a Bayesian model)
             if mod_est is False:
                 self.oaf_delt = common_data['ven_delt_pct']
                 self.plug_delt = common_data['mels_delt_pct']
                 self.price_delt = common_data['delt_price_kwh']
-                self.pc_temp = common_data['pc_tmp_inc']
             else:
-                self.oaf_delt, self.plug_delt, self.price_delt, \
-                    self.pc_temp = (None for n in range(4))
+                self.oaf_delt, self.plug_delt, self.price_delt = (
+                    None for n in range(3))
 
 
 class ModelIO(object):
@@ -545,34 +564,34 @@ class ModelIO(object):
             if mod_init is True or mod_est is True or mod_assess is True:
                 self.Y_all = data.lt['lt_in_delt_pct']
 
-        elif mod == "temperature_precool":
+        elif mod == "temperature_precool" or mod == "demand_precool":
             # If model is being initialized and model assessment is requested,
             # or previously initialized model is being assessed,
             # set training/testing indices to use on the demand/temp. data
             if (mod_init is True and mod_assess is True) or mod_assess is True:
                 # Set training indices
                 self.train_inds = np.random.randint(
-                    0, len(data.pc_tmp),
-                    size=int(len(data.pc_tmp) * train_pct))
+                    0, len(data.pc_dmd_tmp),
+                    size=int(len(data.pc_dmd_tmp) * train_pct))
                 # Set testing indices
                 self.test_inds = [
-                    x for x in range(len(data.pc_tmp)) if
+                    x for x in range(len(data.pc_dmd_tmp)) if
                     x not in self.train_inds]
 
-            # Initialize variables for temperature and demand models
+            # Initialize variables for temp/demand pre-cooling models
 
             # Whole building occupancy fraction
-            occ_frac = data.pc_tmp['occ_frac']
+            occ_frac = data.pc_dmd_tmp['occ_frac']
             # Outdoor air temperature
-            temp_out = data.pc_tmp['t_out']
+            temp_out = data.pc_dmd_tmp['t_out']
             # Outdoor relative humidity
-            rh_out = data.pc_tmp['rh_out']
+            rh_out = data.pc_dmd_tmp['rh_out']
             # Temperature set point difference
-            tmp_delta = data.pc_tmp['tsp_delt']
+            tmp_delta = data.pc_dmd_tmp['tsp_delt']
             # Temperature set point difference lag
-            tmp_delta_lag = data.pc_tmp['tsp_delt_lag']
+            tmp_delta_lag = data.pc_dmd_tmp['tsp_delt_lag']
             # Hours since pre-cooling started
-            pcool_start = data.pc_tmp['hrs_since_pc_st']
+            pcool_start = data.pc_dmd_tmp['hrs_since_pc_st']
             # Temp. set point difference, outdoor temp.
             tmp_out_tmp_delt = temp_out * tmp_delta
             # Outdoor temp., since pre-cooling started
@@ -591,7 +610,10 @@ class ModelIO(object):
                 tmp_out_pc_start], axis=1)
             # Set model output (Y) variable for estimation cases
             if mod_init is True or mod_est is True or mod_assess is True:
-                self.Y_all = data.pc_tmp['t_in_delt']
+                if mod == "temperature_precool":
+                    self.Y_all = data.pc_dmd_tmp['t_in_delt']
+                else:
+                    self.Y_all = data.pc_dmd_tmp['dmd_delt_sf']
 
 
 class ModelIOTrain():
@@ -682,7 +704,7 @@ def main(base_dir):
         print("Loading input data...", end="", flush=True)
         # Read-in input data
         dat = ModelDataLoad(handyfilesvars, opts.mod_init, opts.mod_assess,
-                            opts.mod_est, update=None, ndays_update=None)
+                            opts.mod_est, update_days=None)
         print("Complete.")
 
         # Loop through all model types (temperature, demand, co2, lighting)
@@ -765,7 +787,7 @@ def main(base_dir):
         print("Loading input data...", end="", flush=True)
         # Read-in input data
         dat = ModelDataLoad(handyfilesvars, opts.mod_init, opts.mod_assess,
-                            opts.mod_est, update=None, ndays_update=None)
+                            opts.mod_est, update_days=None)
         print("Complete.")
 
         # Loop through all model types (temperature, demand, co2, lighting)
@@ -899,10 +921,18 @@ def gen_recs(handyfilesvars, sf):
     dat = ModelDataLoad(
         handyfilesvars, opts.mod_init, opts.mod_assess,
         opts.mod_est, update_days=None)
-    # Set number of hours to predict across
-    n_hrs = len(np.unique(dat.hr))
+    # Set number of pre-cool hours to predict across
+    hrs_pc = np.unique(dat.hr[np.where(dat.hr < 0)])
+    # Set number of DR hours to predict across
+    hrs_dr = np.unique(dat.hr[np.where(dat.hr > 0)])
+    # Find names of candidate pre-cooling period strategies
+    names_pc = dat.strategy[np.where(dat.hr == -1)]
     # Find names of candidate DR strategies
     names = dat.strategy[np.where(dat.hr == 1)]
+    # Find indices for the pre-cooling measures within the broader measure set
+    names_pc_inds = []
+    for pcn in names_pc:
+        names_pc_inds.append(np.where(names == pcn)[0][0])
     # Set number of DR strategies to predict across
     n_choices = len(names)
     # Set number of samples to draw. for predictions
@@ -911,10 +941,11 @@ def gen_recs(handyfilesvars, sf):
     pp_dict = {
         key: [] for key in handyfilesvars.mod_dict.keys()}
     # Initialize dict for storing demand/cost/service predictions for each
-    # hour in the analysis
+    # hour in the analysis (including precooling hours as applicable)
     ds_dict_prep = {
-        "demand": [], "cost": [], "temperature": [], "temperature precool": [],
-        "lighting": [], "outdoor air": [], "plug loads": []}
+        "demand": [], "demand precool": [], "cost": [], "cost precool": [],
+        "temperature": [], "temperature precool": [], "lighting": [],
+        "outdoor air": [], "plug loads": []}
     # Sample noise to use in the choice model
     rand_elem = np.random.normal(
         loc=0, scale=1, size=(n_samples, n_choices))
@@ -936,11 +967,60 @@ def gen_recs(handyfilesvars, sf):
     # UPDATED DCE coefficients
     betas_choice = np.array([0.025, -0.31, 0.14, -1.4, 0.05, 0.26])
 
-    # Loop through all hours considered for the event (event plus rebound)
-    for hr in range(n_hrs):
-        print("Making predictions for hour " + str(hr+1))
+    # Loop through all hours considered for the pre-cooling period
+    for hr in hrs_pc:
+        print("Making predictions for pre-cool hour " + str(hr))
         # Set data index that is unique to the current hour
-        inds = np.where(dat.hr == (hr+1))
+        inds = np.where(dat.hr == hr)
+        # Determine which precooling measures are active in the current hour
+        pc_active_flag = []
+        for pcn in names_pc:
+            inds_pca = np.where((dat.hr == hr) & (dat.strategy == pcn))
+            # Inactive pre-cooling measures will have the 'pc_active'
+            # attribute set to zero
+            if dat.pc_active[inds_pca] == 0:
+                pc_active_flag.append(0)
+            else:
+                pc_active_flag.append(1)
+        # Load and repopulate the demand and temperature precooling models
+        for mod in ["demand_precool", "temperature_precool"]:
+            # Reload trace
+            with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
+                    "io_data"][1]), 'rb') as store:
+                trace = pickle.load(store)['trace']
+            pp_dict[mod] = run_mod_prediction(
+                handyfilesvars, trace, mod, dat, n_samples, inds)
+        # Force demand/temperature data for pre-cooling measures that aren't
+        # active in the current hour to zero
+        for n in range(n_samples):
+            for pcm in range(len(names_pc)):
+                if pc_active_flag[pcm] == 0:
+                    pp_dict["demand_precool"]['dmd_pc'][n][pcm], \
+                        pp_dict["temperature_precool"]['ta_pc'][n][pcm] = (
+                            0 for n in range(2))
+        # Multiply change in pre-cooling demand/sf by sf and price delta to
+        # get total cost difference for the operator during the pre-cool period
+        # ; reflect DCE units of $100; convert demand from W/sf to kWh/sf
+        cost_delt = (
+            (pp_dict["demand_precool"]['dmd_pc'] / 1000) * sf *
+            dat.price_delt[inds]) / 100
+        # Store hourly predictions of changes in pre-cooling demand/temperature
+        # and economic benefit for later write-out to recommendations.json
+        # Predicted change in demand (precooling hour)
+        ds_dict_prep["demand precool"].append(
+            pp_dict["demand_precool"]['dmd_pc'])
+        # Predicted change in temperature (precooling hour); NOTE invert the
+        # sign of the predictions to match what is expected by the DCE equation
+        ds_dict_prep["temperature precool"].append(
+            -1*pp_dict["temperature_precool"]['ta_pc'])
+        # Predicted change in economic benefit (precooling hour)
+        ds_dict_prep["cost precool"].append(cost_delt)
+
+    # Loop through all hours considered for the event (event plus rebound)
+    for hr in hrs_dr:
+        print("Making predictions for DR hour " + str(hr))
+        # Set data index that is unique to the current hour
+        inds = np.where(dat.hr == hr)
         for mod in ["demand", "temperature", "lighting"]:
             # Reload trace
             with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
@@ -949,25 +1029,22 @@ def gen_recs(handyfilesvars, sf):
             pp_dict[mod] = run_mod_prediction(
                 handyfilesvars, trace, mod, dat, n_samples, inds)
         # Multiply change in demand/sf by sf and price delta to get total
-        # cost difference for the operator; reflect DCE units of $100
+        # cost difference for the operator; reflect DCE units of $100;
+        # convert demand from W/sf to kWh/sf
         cost_delt = (
-            pp_dict["demand"]['dmd'] * sf * dat.price_delt[inds]) / 100
+            (pp_dict["demand"]['dmd'] / 1000) * sf *
+            dat.price_delt[inds]) / 100
         # Extend oaf delta values for each choice across all samples
         oaf_delt = np.tile(dat.oaf_delt[inds], (n_samples, 1))
         # Extend plug load delta values for each choice across all samples
         plug_delt = np.tile(dat.plug_delt[inds], (n_samples, 1))
-        # Extend pre-cooling values for each choice across all samples
-        pc_temp = np.tile(dat.pc_temp[inds], (n_samples, 1))
-
         # Store hourly predictions of changes in demand, cost, and services
         # Predicted change in demand
         ds_dict_prep["demand"].append(pp_dict["demand"]['dmd'])
         # Predicted change in economic benefit
         ds_dict_prep["cost"].append(cost_delt)
-        # Predicted change in temperature (pre-cooling hour)
-        ds_dict_prep["temperature"].append(pp_dict["temperature"]["ta"])
         # Predicted change in temperature (event hour)
-        ds_dict_prep["temperature precool"].append(pc_temp)
+        ds_dict_prep["temperature"].append(pp_dict["temperature"]["ta"])
         # Predicted change in lighting
         ds_dict_prep["lighting"].append(pp_dict["lighting"]["lt"])
         # Predicted change in outdoor air ventilation fraction
@@ -977,43 +1054,93 @@ def gen_recs(handyfilesvars, sf):
 
     # Initialize a dict to use in storing final demand/cost/service predictions
     # (e.g., the predictions across all hours in the event that are fed into
-    # the discrete choice model), as well as final choice probabilities
+    # the discrete choice model), as well as final choice probabilities; all
+    # values are initialized to zero
     ds_dict_fin = {
-        "demand": [], "cost": [], "temperature": [], "temperature precool": [],
-        "lighting": [], "outdoor air": [], "plug loads": [],
-        "choice probabilities": []}
+        key: np.zeros((n_samples, n_choices)) for key in [
+            "demand", "demand precool", "cost", "cost precool", "temperature",
+            "temperature precool", "lighting", "outdoor air", "plug loads"]
+    }
     # Loop through all variable keys in the final predictions dict and update
     # the final predictions data
-    for key in ds_dict_fin.keys():
+    for key in sorted(ds_dict_fin.keys()):
         # For economic benefit predictions, sum all the predicted changes in
-        # costs across all hours in the analysis (stored in the prep dict)
-        if key == "cost":
-            # Loop through all hours of cost data stored in the prep dict and
-            # add to the total economic benefit variable
+        # costs across all hours in the analysis (stored in the prep dict);
+        # add pre-cooling economic losses to overall economic benefit; handle
+        # case where there are no pre-cooling measures or costs
+        if key == "cost" or (
+                key == "cost precool" and len(ds_dict_prep[key]) != 0):
+            # Loop through all hours of cost data stored in the prep dicts and
+            # add to the economic benefit/loss variables
             for ind, elem in enumerate(ds_dict_prep[key]):
-                # If first hour, initialize the change in cost data
-                if ind == 0:
-                    ds_dict_fin[key] = elem
-                # If after the first hour, add to the change in cost data
+                # For total economic benefit, sum in-event benefits across all
+                # hours of the event + rebounud
+                if key == "cost":
+                    # If first hour, initialize the change in cost data
+                    if ind == 0:
+                        ds_dict_fin[key] = elem
+                    # If after the first hour, add to the change in cost data
+                    else:
+                        ds_dict_fin[key] = np.add(ds_dict_fin[key], elem)
+                # For pre-cooling period economic loss, sum pre-cooling
+                # economic losses across all hours of the pre-cooling period;
+                # add these losses to the total economic benefit variable as
+                # well
                 else:
-                    ds_dict_fin[key] = np.add(ds_dict_fin[key], elem)
-        # For predictions that do not concern economic benefits or choice
-        # probabilities (e.g., change in demand, temperature, lighting,
+                    # Loop through all samples
+                    for ind_n in range(n_samples):
+                        # Loop through all pre-cooling strategies
+                        for ind_pc in range(len(names_pc)):
+                            # Update both total economic benefit ('cost') and
+                            # pre-cooling economic loss variables in the final
+                            # dict
+                            for cost_key in ["cost", "cost precool"]:
+                                ds_dict_fin[cost_key][ind_n][
+                                    names_pc_inds[ind_pc]] += \
+                                    elem[ind_n][ind_pc]
+        # For predictions that do not concern economic benefits/losses or
+        # choice probabilities (e.g., change in demand, temperature, lighting,
         # outdoor air, and plug loads), pull the max median predicted change
-        # in these variables from the prep dict, across all simulated hours
-        elif key != "choice probabilities":
-            # Initialize list for storing the median predicted change in the
-            # variable for the given hour represented by the the prep dict data
+        # in these variables from the prep dict, across all simulated hours;
+        # handle cases where there are no pre-cooling measures or service
+        # changes to update
+        elif key != "choice probabilities" and (key not in [
+            "temperature precool", "demand precool", "cost precool"] or (
+                key in ["temperature precool", "demand precool"] and len(
+                    ds_dict_prep[key]) != 0)):
+            # Initialize list for storing the median predicted change in
+            # variable for the given hour represented by the the prep dict
             medians = []
-            # Loop through all hours of data stored in the prep dict and
-            # append median values of the data for each hour to the median list
+            # Loop through all hours of data and measures stored in the prep
+            # dict and append median values of the data for each hour to a list
             for elem in ds_dict_prep[key]:
-                medians.append(np.median(elem))
-            # Find the hour in which the predicted median value of the variable
-            # is at its maximum
-            max_median = np.where(medians == max(medians))[0][0]
-            # Add data from the max hour only to the final predictions dict
-            ds_dict_fin[key] = ds_dict_prep[key][max_median]
+                medians.append(np.median(elem, axis=0))
+            # Transpose the resultant list to ease further operations on it
+            medians = np.transpose(medians)
+            # Find the hour in which the predicted median value of the given
+            # variable is at its maximum for a given measure (or, in the case
+            # of precooling demand, at its minimum for a given measure).
+            if key != "demand precool":
+                max_min_median = [np.where(x == max(x))[0][0] for x in medians]
+            else:
+                max_min_median = [np.where(x == min(x))[0][0] for x in medians]
+            # Set the variable in the final dict to reflect these max or min
+            # hour value sets for each measure
+            # Loop through all samples
+            for ind_n in range(n_samples):
+                # Loop through all measures per sample
+                for ind_m in range(len(ds_dict_prep[key][0][0])):
+                    # Set the final dict variable differently according to the
+                    # variable itself; precooling  temperature and demand
+                    # variables will reflect only the subset of the total set
+                    # of measures that feature pre-cooling
+                    if key not in ["temperature precool", "demand precool"]:
+                        ds_dict_fin[key][ind_n][ind_m] = ds_dict_prep[key][
+                            max_min_median[ind_m]][ind_n][ind_m]
+                    else:
+                        ds_dict_fin[key][ind_n][names_pc_inds[ind_m]] = \
+                            ds_dict_prep[key][max_min_median[ind_m]][
+                            ind_n][ind_m]
         # For choice probability data, do nothing here
         else:
             pass
@@ -1028,9 +1155,8 @@ def gen_recs(handyfilesvars, sf):
         rand_elem
     # Softmax transformation of logits into choice probabilities
     choice_probs = softmax(choice_logits, axis=1)
-    # print(len(choice_probs), len(choice_probs[0]))
-    for n in range(len(choice_probs)):
-        ds_dict_fin["choice probabilities"].append(choice_probs[n])
+    # Add choice probabilities to the final variable data dict to write out
+    ds_dict_fin["choice probabilities"] = choice_probs
     # Simulate choices across all samples given inputs and betas
     choice_out = [
         np.random.choice(n_choices, 1000, p=x) for x in choice_probs]
