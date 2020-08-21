@@ -13,6 +13,7 @@ import arviz as az
 from matplotlib import pyplot as plt
 import matplotlib as mpl
 import json
+from pymc3.exceptions import SamplingError
 tt.config.compute_value = "ignore"
 
 
@@ -160,8 +161,8 @@ class UsefulFilesVars(object):
                  'ven_delt_pct_lag'),
                 (['<i4'] * 4 + ['<U25'] + ['<f8'] * 19)]
             self.coef_names_dtypes = [
-                ('demand', 'temperature', 'co2', 'lighting',
-                 'temperature_precool', 'demand_precool'), (['<f8'] * 6)]
+                ('demand_base', 'demand', 'temperature', 'co2', 'lighting',
+                 'temperature_precool', 'demand_precool'), (['<f8'] * 7)]
         # Set data input file column names and data types for model
         # re-estimation; these will be the same across models
         elif mod_est is True:
@@ -278,10 +279,8 @@ class ModelDataLoad(object):
             in model prediction.
         hr (numpy ndarray): Hours covered by model prediction input data
         strategy (numpy ndarray): Names of strategies to make predictions for.
-        pc_active (numpy ndarray): Data used to determine whether a given
-            pre-cooling strategy is active in a given pre-cooling period hour
-            (will be zero when it is not)
-
+        pc_active (numpy ndarray): Data used to determine whether
+            pre-cooling strategies are active.
     """
 
     def __init__(self, handyfilesvars, mod_init, mod_assess,
@@ -355,18 +354,31 @@ class ModelDataLoad(object):
                 self.hr = common_data['Hr']
                 self.strategy = common_data['Name']
                 self.pc_active = common_data['hrs_since_pc_st']
-            elif mod_est is True and update_days is not None:
-                day_sequence = list(
-                    range(update_days[0], update_days[1] + 1))
+                # Set inputs to demand, temperature, co2, lighting, and
+                # pre-cooling models from prediction/estimation input files
+                self.dmd_tmp, self.co2, self.lt, self.pc_dmd_tmp = (
+                    common_data for n in range(4))
+            elif mod_est is True:
+                if update_days is None:
+                    self.event_days = np.unique(common_data['day_num'])
+                else:
+                    self.event_days = list(
+                        range(update_days[0], update_days[1] + 1))
                 common_data = common_data[
-                    np.in1d(common_data['day_num'], day_sequence)]
+                    np.in1d(common_data['day_num'], self.event_days)]
+                # Set inputs to demand, temperature, co2, lighting, and
+                # pre-cooling models from prediction/estimation input files
+                self.dmd_tmp, self.co2, self.lt = (
+                    common_data[
+                        np.where(common_data['hrs_since_pc_st'] == 0)] for
+                    n in range(3))
+                # Note: pre-cooling data are flagged by rows where the since
+                # precooling started value is not zero
+                self.pc_dmd_tmp = common_data[
+                    np.where(common_data['hrs_since_pc_st'] > 0)]
+                self.pc_active = len(self.pc_dmd_tmp)
                 self.hr = None
                 self.strategy = None
-                self.pc_active = None
-            # Set inputs to demand, temperature, co2, and lighting models
-            # from prediction input file
-            self.dmd_tmp, self.co2, self.lt, self.pc_dmd_tmp = (
-                common_data for n in range(4))
 
             # Set outdoor air fraction delta, plug load delta and price
             # delta to values from prediction input file (these are not
@@ -759,21 +771,42 @@ def main(base_dir):
 
     elif opts.mod_est is True:
 
+        # Load updating data
+        print("Loading input data...", end="", flush=True)
+        dat = ModelDataLoad(handyfilesvars, opts.mod_init, opts.mod_assess,
+                            opts.mod_est, update_days=None)
+        print("Complete.")
+
         # **** THESE VARIABLES SHOULD BE REPLACED BY COSIM INPUTS ****
-        n_events = 5  # Total number of DR events expected in the cosim
-        event_start = 1  # Start event day for current update
-        event_end = 5  # End event day for current update
-        traces = {"demand": [], "temperature": []}  # Will be initialized
-        # automatically below in the cosim case; delete this for cosim
-        # *************************************************************
+        # Initialize traces
+        traces = ""
+        # Set total number of events and min/max event number based on in data
+        n_events, event_start, event_end = [
+            len(dat.event_days), min(dat.event_days), max(dat.event_days)]
+        # ********************************************************************
 
         # Initialize blank traces lists for the first update to each mod type
-        if event_start == 1:
+        if not traces:
             traces = {"demand": [], "temperature": []}
-        # Loop through model types to update (demand and temperature)
-        for mod in ["demand", "temperature"]:
-            traces[mod] = gen_updates(
-                handyfilesvars, event_start, event_end, opts, mod, traces[mod])
+        # Determine model types to update (demand and temperature if no
+        # precooling is indicated by the input data, otherwise add precooling
+        # demand and temperature models)
+        if dat.pc_active != 0:
+            mod_update_list = ["demand", "temperature", "demand precool",
+                               "temperature precool"]
+        else:
+            mod_update_list = ["demand", "temperature"]
+
+        # Loop through model updates
+        for mod in mod_update_list:
+            try:
+                traces[mod] = gen_updates(
+                    handyfilesvars, event_start, event_end, opts, mod,
+                    traces[mod], dat)
+            # Handle case where update cannot be estimated (e.g., bad initial
+            # energy, returns Value Error)
+            except (ValueError, SamplingError):
+                traces[mod].append(None)
             # After the last update, generate some diagnostic plots showing
             # how parameter estimates evolved across all updates
             if event_end == n_events:
@@ -823,15 +856,7 @@ def main(base_dir):
 
 
 def gen_updates(
-        handyfilesvars, event_start, event_end, opts, mod, traces):
-
-    print("Loading input data...", end="", flush=True)
-    # Set start and end event information for current update
-    update_days = [event_start, event_end]
-    # Read-in input data
-    dat = ModelDataLoad(handyfilesvars, opts.mod_init, opts.mod_assess,
-                        opts.mod_est, update_days)
-    print("Complete.")
+        handyfilesvars, event_start, event_end, opts, mod, traces, dat):
 
     print("Initializing " + mod + " sub-model variables...",
           end="", flush=True)
@@ -929,6 +954,15 @@ def gen_recs(handyfilesvars, sf):
     names_pc = dat.strategy[np.where(dat.hr == -1)]
     # Find names of candidate DR strategies
     names = dat.strategy[np.where(dat.hr == 1)]
+    # Add baseline (do nothing) option to the set of names to write out, unless
+    # the user has restricted the baseline option from consideration; attach
+    # a default tag if no other strategy names are tagged as the default
+    if opts.no_base is not True:
+        default_flag = np.where(np.char.find(names, "(D)") != -1)
+        if len(default_flag) != 0:
+            names = np.append(names, "Baseline - Do Nothing")
+        else:
+            names = np.append(names, "Baseline - Do Nothing (D)")
     # Find indices for the pre-cooling measures within the broader measure set
     names_pc_inds = []
     for pcn in names_pc:
@@ -946,9 +980,6 @@ def gen_recs(handyfilesvars, sf):
         "demand": [], "demand precool": [], "cost": [], "cost precool": [],
         "temperature": [], "temperature precool": [], "lighting": [],
         "outdoor air": [], "plug loads": []}
-    # Sample noise to use in the choice model
-    rand_elem = np.random.normal(
-        loc=0, scale=1, size=(n_samples, n_choices))
     # Initialize a numpy array that stores the count of the number of
     # times each candidate DR strategy is selected across simulated hours
     counts = np.zeros(n_choices)
@@ -1055,7 +1086,8 @@ def gen_recs(handyfilesvars, sf):
     # Initialize a dict to use in storing final demand/cost/service predictions
     # (e.g., the predictions across all hours in the event that are fed into
     # the discrete choice model), as well as final choice probabilities; all
-    # values are initialized to zero
+    # values are initialized to zero; note that baseline choice option will
+    # not be updated (is left with all zero values for utility calc later)
     ds_dict_fin = {
         key: np.zeros((n_samples, n_choices)) for key in [
             "demand", "demand precool", "cost", "cost precool", "temperature",
@@ -1076,12 +1108,20 @@ def gen_recs(handyfilesvars, sf):
                 # For total economic benefit, sum in-event benefits across all
                 # hours of the event + rebounud
                 if key == "cost":
-                    # If first hour, initialize the change in cost data
-                    if ind == 0:
-                        ds_dict_fin[key] = elem
-                    # If after the first hour, add to the change in cost data
-                    else:
-                        ds_dict_fin[key] = np.add(ds_dict_fin[key], elem)
+                    # Loop through all samples
+                    for ind_n in range(n_samples):
+                        # Loop through all measures per sample
+                        for ind_m in range(len(ds_dict_prep[key][0][0])):
+                            # If first hour, initialize the change in cost data
+                            if ind == 0:
+                                ds_dict_fin[key][ind_n][ind_m] = \
+                                    elem[ind_n][ind_m]
+                            # If after the first hour, add to the change in
+                            # cost data
+                            else:
+                                ds_dict_fin[key][ind_n][ind_m] = \
+                                    ds_dict_fin[key][ind_n][ind_m] + \
+                                    elem[ind_n][ind_m]
                 # For pre-cooling period economic loss, sum pre-cooling
                 # economic losses across all hours of the pre-cooling period;
                 # add these losses to the total economic benefit variable as
@@ -1151,8 +1191,7 @@ def gen_recs(handyfilesvars, sf):
         ds_dict_fin["outdoor air"], ds_dict_fin["plug loads"]])
     # Multiply model inputs by DCE betas to yield choice logits
     choice_logits = np.sum([x_choice[i] * betas_choice[i] for
-                           i in range(len(x_choice))], axis=0) + \
-        rand_elem
+                           i in range(len(x_choice))], axis=0)
     # Softmax transformation of logits into choice probabilities
     choice_probs = softmax(choice_logits, axis=1)
     # Add choice probabilities to the final variable data dict to write out
@@ -1180,7 +1219,7 @@ def gen_recs(handyfilesvars, sf):
             "used to generate predicted choice probabilities, as well as the "
             "predicted choice probability outputs themselves"),
         "predictions": {
-            x: round(((y / counts_denom) * 100), 1) for
+            x: round(((y / counts_denom) * 100), 5) for
             x, y in zip(names, counts)},
         "input output data": {key: {
             names[x]: list(np.transpose(ds_dict_fin[key])[x]) for
@@ -1315,18 +1354,19 @@ def plot_updating(handyfilesvars, param, traces, mod):
     # Develop and plot kernel density estimators of parameter traces,
     # and plot these estimators across each successive parameter update
     for update_i, trace in enumerate(traces):
-        # Outdoor temperature
-        samples_oat = np.array([x[1] for x in trace[param]])
-        smin_oat, smax_oat = np.min(samples_oat), np.max(samples_oat)
-        x_oat = np.linspace(smin_oat, smax_oat, 100)
-        y_oat = stats.gaussian_kde(samples_oat)(x_oat)
-        axs[0].plot(x_oat, y_oat, color=cmap(1 - update_i / len(traces)))
-        # Set point adjustment level
-        samples_sp = np.array([x[4] for x in trace[param]])
-        smin_sp, smax_sp = np.min(samples_sp), np.max(samples_sp)
-        x_sp = np.linspace(smin_sp, smax_sp, 100)
-        y_sp = stats.gaussian_kde(samples_sp)(x_sp)
-        axs[1].plot(x_sp, y_sp, color=cmap(1 - update_i / len(traces)))
+        if trace is not None:
+            # Outdoor temperature
+            samples_oat = np.array([x[1] for x in trace[param]])
+            smin_oat, smax_oat = np.min(samples_oat), np.max(samples_oat)
+            x_oat = np.linspace(smin_oat, smax_oat, 100)
+            y_oat = stats.gaussian_kde(samples_oat)(x_oat)
+            axs[0].plot(x_oat, y_oat, color=cmap(1 - update_i / len(traces)))
+            # Set point adjustment level
+            samples_sp = np.array([x[4] for x in trace[param]])
+            smin_sp, smax_sp = np.min(samples_sp), np.max(samples_sp)
+            x_sp = np.linspace(smin_sp, smax_sp, 100)
+            y_sp = stats.gaussian_kde(samples_sp)(x_sp)
+            axs[1].plot(x_sp, y_sp, color=cmap(1 - update_i / len(traces)))
     # Set OAT plot title and axis labels
     axs[0].set_title("Outdoor Temperature")
     axs[0].set_ylabel('Frequency')
@@ -1359,6 +1399,9 @@ if __name__ == '__main__':
                         help="Building type/vintage")
     parser.add_argument("--bldg_sf", required=True, type=int,
                         help="Building square footage")
+    parser.add_argument("--no_base", action="store_true",
+                        help="Remove the baseline (do nothing) DR strategy"
+                             "from consideration")
     # Object to store all user-specified execution arguments
     opts = parser.parse_args()
     base_dir = getcwd()

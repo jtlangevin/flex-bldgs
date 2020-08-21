@@ -9,6 +9,8 @@ lapply(x_r, require, character.only = TRUE)
 dat <- fromJSON(file = "recommendations.json")
 # Retrieve input/ouput data
 dat_io <- dat$`input output data`
+# Retrieve choice frequency data
+dat_freq <- dat$`predictions`
 # Set the measure names list
 dat_meas <- names(dat$`predictions`)
 
@@ -26,6 +28,7 @@ temp_dat_pc <- data.frame(matrix(NA, length(dat_meas), length(dat_io$`temperatur
 lgt_dat <- data.frame(matrix(NA, length(dat_meas), length(dat_io$`lighting`[[dat_meas[1]]])))
 # Output: change in selection probability
 chc_dat <- data.frame(matrix(NA, length(dat_meas), length(dat_io$`choice probabilities`[[dat_meas[1]]])))
+chc_dat_pts <- matrix(NA, length(dat_meas))
 # Fill in initialized data frames with simulated data
 for (r in (1:(length(dat_meas)))){
 	# Demand (event/precool)
@@ -41,13 +44,14 @@ for (r in (1:(length(dat_meas)))){
 	lgt_dat[r, ] = dat_io$`lighting`[[dat_meas[r]]]
 	# Choice probability
 	chc_dat[r, ] = dat_io$`choice probabilities`[[dat_meas[r]]]
+	chc_dat_pts[r] = dat_freq[[dat_meas[r]]]
 }
 
 # Plot the data
 jpeg("IO_Diagnostics.jpeg", width = 25, height=16, units="in", res=200)
 # Set measure names to use in grouping each of the variable data
 dmd_dat$group <- dmd_dat_pc$group <- cost_dat$group <- cost_dat_pc$group <- 
-temp_dat$group <- temp_dat_pc$group <- lgt_dat$group <- chc_dat$group <- dat_meas[1:(length(dat_meas))]
+temp_dat$group <- temp_dat_pc$group <- lgt_dat$group <- chc_dat$group <- dat_meas
 
 # Reformat and plot the max change in demand data
 # Event
@@ -83,10 +87,26 @@ plt_tmp_pc_fin <- plt_tmp_pc + coord_flip()
 lgt_dat.m <- melt(lgt_dat, id.vars="group")
 plt_lgt <- ggplot(lgt_dat.m, aes(x=reorder(group, value, FUN=median), y=value)) + geom_boxplot() + ylab("Max. Decrease in Event Lighting (frac)") + xlab("Candidate Strategy")
 plt_lgt_fin <- plt_lgt + coord_flip()
+
 # Reformat and plot the selection probability data
 chc_dat.m <- melt(chc_dat, id.vars="group")
-plt_lgt <- ggplot(chc_dat.m, aes(x=reorder(group, value, FUN=median), y=value)) + geom_boxplot() + ylab("Selection Probability (frac)") + xlab("Candidate Strategy")
-plt_chc_fin <- plt_lgt + coord_flip() + geom_hline(yintercept = 0.056, color="red", size=1)
+# Initialize a dataframe for storing overall frequencies of selection
+chc_dat_pts <- data.frame(
+	xname = dat_meas,
+	ypos = chc_dat_pts/100)
+# Set threshold for measure selection
+index_thres = which(grepl("(D)", dat_meas, fixed=TRUE))
+# Check for default option; if there is none, selection threshold is 1/total N measures
+if (length(index_thres) != 0){
+	threshold = chc_dat_pts$`ypos`[index_thres]
+}else{
+	threshold = (1 / length(dat_meas))	
+}
+plt_chc <- ggplot(chc_dat.m, aes(x=reorder(group, value, FUN=median), y=value)) + geom_boxplot() + 
+	geom_point(data=chc_dat_pts, mapping = aes(x = xname, y = ypos), color = "green") +
+	ylab("Selection Probability (frac)") + xlab("Candidate Strategy")
+plt_chc_fin <- plt_chc + coord_flip() + geom_hline(yintercept = threshold, color="red", size=1)
+
 # Organize the plots on one page
 grid.arrange(plt_dmd_fin , plt_dmd_pc_fin, plt_cost_fin, plt_cost_pc_fin, plt_tmp_fin, plt_tmp_pc_fin, plt_lgt_fin, plt_chc_fin, nrow = 2)
 # grid.arrange(plt_cost_fin, plt_tmp_fin, plt_lgt_fin, plt_chc_fin, nrow = 1)
