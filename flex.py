@@ -281,6 +281,10 @@ class ModelDataLoad(object):
         strategy (numpy ndarray): Names of strategies to make predictions for.
         pc_active (numpy ndarray): Data used to determine whether
             pre-cooling strategies are active.
+        tmp_active (numpy ndarray): Data used to determine whether
+            a measure changes the thermostat set point in a current hour.
+        tmp_active_prev (numpy ndarray): Data used to determine whether
+            a measure changed the thermostat set point in a previous hour.
     """
 
     def __init__(self, handyfilesvars, mod_init, mod_assess,
@@ -354,6 +358,9 @@ class ModelDataLoad(object):
                 self.hr = common_data['Hr']
                 self.strategy = common_data['Name']
                 self.pc_active = common_data['hrs_since_pc_st']
+                self.tmp_active = common_data['tsp_delt']
+                self.tmp_active_prev = common_data['tsp_delt_lag']
+                self.pc_mag = common_data['pc_tmp_inc']
                 # Set inputs to demand, temperature, co2, lighting, and
                 # pre-cooling models from prediction/estimation input files
                 self.dmd_tmp, self.co2, self.lt, self.pc_dmd_tmp = (
@@ -791,9 +798,11 @@ def main(base_dir):
         # Determine model types to update (demand and temperature if no
         # precooling is indicated by the input data, otherwise add precooling
         # demand and temperature models)
+        # **** Restrict updating of temp. pre-cooling model for now ********
         if dat.pc_active != 0:
-            mod_update_list = ["demand", "temperature", "demand precool",
-                               "temperature precool"]
+            # mod_update_list = ["demand", "temperature", "demand_precool",
+            #                    "temperature_precool"]
+            mod_update_list = ["demand", "temperature", "demand_precool"]
         else:
             mod_update_list = ["demand", "temperature"]
 
@@ -952,17 +961,17 @@ def gen_recs(handyfilesvars, sf):
     hrs_dr = np.unique(dat.hr[np.where(dat.hr > 0)])
     # Find names of candidate pre-cooling period strategies
     names_pc = dat.strategy[np.where(dat.hr == -1)]
-    # Find names of candidate DR strategies
-    names = dat.strategy[np.where(dat.hr == 1)]
+    # Find names of candidate DR strategies (without baseline option)
+    names_o = dat.strategy[np.where(dat.hr == 1)]
     # Add baseline (do nothing) option to the set of names to write out, unless
     # the user has restricted the baseline option from consideration; attach
     # a default tag if no other strategy names are tagged as the default
     if opts.no_base is not True:
-        default_flag = np.where(np.char.find(names, "(D)") != -1)
-        if len(default_flag) != 0:
-            names = np.append(names, "Baseline - Do Nothing")
+        default_flag = np.where(np.char.find(names_o, "(D)") != -1)
+        if len(default_flag[0]) != 0:
+            names = np.append(names_o, "Baseline - Do Nothing")
         else:
-            names = np.append(names, "Baseline - Do Nothing (D)")
+            names = np.append(names_o, "Baseline - Do Nothing (D)")
     # Find indices for the pre-cooling measures within the broader measure set
     names_pc_inds = []
     for pcn in names_pc:
@@ -1014,27 +1023,33 @@ def gen_recs(handyfilesvars, sf):
             else:
                 pc_active_flag.append(1)
         # Load and repopulate the demand and temperature precooling models
-        for mod in ["demand_precool", "temperature_precool"]:
+        # for mod in ["demand_precool", "temperature_precool"]:
+        # **** Restrict use of temperature pre-cooling model for now *****
+        for mod in ["demand_precool"]:
             # Reload trace
             with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
                     "io_data"][1]), 'rb') as store:
                 trace = pickle.load(store)['trace']
             pp_dict[mod] = run_mod_prediction(
                 handyfilesvars, trace, mod, dat, n_samples, inds)
-        # Force demand/temperature data for pre-cooling measures that aren't
+        # Force demand data for pre-cooling measures that aren't
         # active in the current hour to zero
         for n in range(n_samples):
             for pcm in range(len(names_pc)):
                 if pc_active_flag[pcm] == 0:
-                    pp_dict["demand_precool"]['dmd_pc'][n][pcm], \
-                        pp_dict["temperature_precool"]['ta_pc'][n][pcm] = (
-                            0 for n in range(2))
+                    # pp_dict["demand_precool"]['dmd_pc'][n][pcm], \
+                    #     pp_dict["temperature_precool"]['ta_pc'][n][pcm] = (
+                    #         0 for n in range(2))
+                    pp_dict["demand_precool"]['dmd_pc'][n][pcm] = 0
         # Multiply change in pre-cooling demand/sf by sf and price delta to
         # get total cost difference for the operator during the pre-cool period
         # ; reflect DCE units of $100; convert demand from W/sf to kWh/sf
         cost_delt = (
             (pp_dict["demand_precool"]['dmd_pc'] / 1000) * sf *
             dat.price_delt[inds]) / 100
+        # Pull changes for each strategy during the pre-cool period directly
+        # from the prediction input file
+        pc_mags = np.tile(dat.pc_mag[inds], (n_samples, 1))
         # Store hourly predictions of changes in pre-cooling demand/temperature
         # and economic benefit for later write-out to recommendations.json
         # Predicted change in demand (precooling hour)
@@ -1042,8 +1057,12 @@ def gen_recs(handyfilesvars, sf):
             pp_dict["demand_precool"]['dmd_pc'])
         # Predicted change in temperature (precooling hour); NOTE invert the
         # sign of the predictions to match what is expected by the DCE equation
-        ds_dict_prep["temperature precool"].append(
-            -1*pp_dict["temperature_precool"]['ta_pc'])
+        # **** Restrict this prediction for now and pull from input file ***
+        # ds_dict_prep["temperature precool"].append(
+        #     -1*pp_dict["temperature_precool"]['ta_pc'])
+        # ds_dict_prep["temperature precool"].append(
+        #     -1*pp_dict["temperature_precool"]['ta_pc'])
+        ds_dict_prep["temperature precool"].append(pc_mags)
         # Predicted change in economic benefit (precooling hour)
         ds_dict_prep["cost precool"].append(cost_delt)
 
@@ -1052,6 +1071,18 @@ def gen_recs(handyfilesvars, sf):
         print("Making predictions for DR hour " + str(hr))
         # Set data index that is unique to the current hour
         inds = np.where(dat.hr == hr)
+        # Determine which measures affect thermostat set points in the current
+        # hour
+        tmp_active_flag = []
+        for mn in names_o:
+            inds_tmp = np.where((dat.hr == hr) & (dat.strategy == mn))
+            # Measures that do not affect tsp will have the change in
+            # set point and lag in set point change vars set to zero
+            if (dat.tmp_active[inds_tmp] == 0) & \
+               (dat.tmp_active_prev[inds_tmp] == 0):
+                tmp_active_flag.append(0)
+            else:
+                tmp_active_flag.append(1)
         for mod in ["demand", "temperature", "lighting"]:
             # Reload trace
             with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
@@ -1059,6 +1090,12 @@ def gen_recs(handyfilesvars, sf):
                 trace = pickle.load(store)['trace']
             pp_dict[mod] = run_mod_prediction(
                 handyfilesvars, trace, mod, dat, n_samples, inds)
+        # Force predicted temperature change for measures that don't affect
+        # thermostat set points to zero
+        for n in range(n_samples):
+            for tm in range(len(names_o)):
+                if tmp_active_flag[tm] == 0:
+                    pp_dict["temperature"]['ta'][n][tm] = 0
         # Multiply change in demand/sf by sf and price delta to get total
         # cost difference for the operator; reflect DCE units of $100;
         # convert demand from W/sf to kWh/sf
