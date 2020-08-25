@@ -278,9 +278,6 @@ class ModelDataLoad(object):
         price_delt (numpy ndarray): $/kWh incentive by DR strategy for use
             in model prediction.
         hr (numpy ndarray): Hours covered by model prediction input data
-        strategy (numpy ndarray): Names of strategies to make predictions for.
-        pc_active (numpy ndarray): Data used to determine whether
-            pre-cooling strategies are active.
         tmp_active (numpy ndarray): Data used to determine whether
             a measure changes the thermostat set point in a current hour.
         tmp_active_prev (numpy ndarray): Data used to determine whether
@@ -357,7 +354,6 @@ class ModelDataLoad(object):
             if mod_est is False:
                 self.hr = common_data['Hr']
                 self.strategy = common_data['Name']
-                self.pc_active = common_data['hrs_since_pc_st']
                 self.tmp_active = common_data['tsp_delt']
                 self.tmp_active_prev = common_data['tsp_delt_lag']
                 self.pc_mag = common_data['pc_tmp_inc']
@@ -383,7 +379,9 @@ class ModelDataLoad(object):
                 # precooling started value is not zero
                 self.pc_dmd_tmp = common_data[
                     np.where(common_data['hrs_since_pc_st'] > 0)]
-                self.pc_active = len(self.pc_dmd_tmp)
+                self.tmp_active = common_data['tsp_delt']
+                self.tmp_active_prev = None
+                self.pc_mag = None
                 self.hr = None
                 self.strategy = None
 
@@ -796,10 +794,10 @@ def main(base_dir):
         if not traces:
             traces = {"demand": [], "temperature": []}
         # Determine model types to update (demand and temperature if no
-        # precooling is indicated by the input data, otherwise add precooling
-        # demand and temperature models)
+        # precooling is indicated by the input data (TSP<0), otherwise add
+        # precooling demand and temperature models)
         # **** Restrict updating of temp. pre-cooling model for now ********
-        if dat.pc_active != 0:
+        if dat.tmp_active < 0:
             # mod_update_list = ["demand", "temperature", "demand_precool",
             #                    "temperature_precool"]
             mod_update_list = ["demand", "temperature", "demand_precool"]
@@ -1016,9 +1014,8 @@ def gen_recs(handyfilesvars, sf):
         pc_active_flag = []
         for pcn in names_pc:
             inds_pca = np.where((dat.hr == hr) & (dat.strategy == pcn))
-            # Inactive pre-cooling measures will have the 'pc_active'
-            # attribute set to zero
-            if dat.pc_active[inds_pca] == 0:
+            # Inactive pre-cooling measures will have TSP of zero
+            if dat.tmp_active[inds_pca] == 0:
                 pc_active_flag.append(0)
             else:
                 pc_active_flag.append(1)
