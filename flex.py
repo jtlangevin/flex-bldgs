@@ -126,6 +126,11 @@ class UsefulFilesVars(object):
             lgt_dat = ("data", "test_predict.csv")
         stored_lt = ("model_stored", "lt.pkl")
 
+        # HASSAN: Set DCE input/output file names here
+        # DCE model is not broken out by building type/vintage
+        dce_dat = ("data", "dce_dat.csv")
+        stored_dce = ("model_stored", "dce.pkl")
+
         # Set data input file column names and data types for model
         # initialization; these are different by model type (though the same
         # for the temperature and demand models, which draw from the same CSV)
@@ -196,6 +201,10 @@ class UsefulFilesVars(object):
                     'lt_pwr_delt'),
                     (['<U50'] + ['<f8'] * 22)] for n in range(4))
             self.coef_names_dtypes = None
+        # HASSAN: Set DCE model column names and data types
+        dce_names_dtypes = [(
+            'choice', 'economy', 'pc_tmp', 'tmp', 'lgt', 'oa', 'plug'),
+            (['<f8'] * 7)]
 
         # For each model type, store information on input/output data file
         # names, input/output data file formats, model variables, and
@@ -254,6 +263,14 @@ class UsefulFilesVars(object):
                     "traceplots_dmd_pc.png", "postplots_dmd_pc.png",
                     "ppcheck_dmd_pc.png", "scatter_dmd_pc.png",
                     "update_dmd_pc.png"]
+            },
+            # HASSAN: Store all key info. needed to read in and
+            # assess the DCE model
+            "choice": {
+                "io_data": [dce_dat, stored_dce],
+                "io_data_names": dce_names_dtypes,
+                "var_names": ['dce_params', 'dce_sd', 'dce'],
+                "fig_names": ["traceplots_dce.png", "postplots_dce.png"]
             }
 
         }
@@ -337,6 +354,15 @@ class ModelDataLoad(object):
                 skip_header=True, delimiter=',',
                 names=handyfilesvars.coef_names_dtypes[0],
                 dtype=handyfilesvars.coef_names_dtypes[1])
+            # HASSAN: Read in data for initializing choice model
+            self.choice = np.genfromtxt(
+                path.join(base_dir, *handyfilesvars.mod_dict[
+                    "choice"]["io_data"][0]),
+                skip_header=True, delimiter=',',
+                names=handyfilesvars.mod_dict[
+                    "choice"]["io_data_names"][0],
+                dtype=handyfilesvars.mod_dict[
+                    "choice"]["io_data_names"][1])
         # Data read-in for model re-estimation/prediction is common across
         # model types
         else:
@@ -395,6 +421,9 @@ class ModelDataLoad(object):
             else:
                 self.oaf_delt, self.plug_delt, self.price_delt = (
                     None for n in range(3))
+            # When not initializing or assessing a model, choice model
+            # attribute is irrelevant
+            self.choice = None
 
 
 class ModelIO(object):
@@ -631,6 +660,24 @@ class ModelIO(object):
                     self.Y_all = data.pc_dmd_tmp['t_in_delt']
                 else:
                     self.Y_all = data.pc_dmd_tmp['dmd_delt_sf']
+        # HASSAN: Initialize input/output variables for choice regression
+        elif mod == "choice":
+            # Economic benefit
+            economy = data.choice['economy']
+            # Pre-cooling temp. decrease
+            pc_tmp = data.choice['pc_tmp']
+            # Temp. increase
+            tmp = data.choice['tmp']
+            # Lighting decrease
+            lgt = data.choice['lgt']
+            # Outdoor air decrease
+            oa = data.choice['oa']
+            # Plug load decrease
+            plug = data.choice['plug']
+            # Set model input (X) variables; note, NO INTERCEPT
+            self.X_all = np.stack([
+                economy, pc_tmp, tmp, lgt, oa, plug], axis=1)
+            self.Y_all = data.choice['choice']
 
 
 class ModelIOTrain():
@@ -725,7 +772,8 @@ def main(base_dir):
         print("Complete.")
 
         # Loop through all model types (temperature, demand, co2, lighting)
-        for mod in handyfilesvars.mod_dict.keys():
+        # for mod in handyfilesvars.mod_dict.keys():
+        for mod in ["choice"]:
 
             print("Initializing " + mod + " sub-model variables...",
                   end="", flush=True)
@@ -741,17 +789,33 @@ def main(base_dir):
             with pm.Model() as var_mod:
                 print("Setting " + mod + " sub-model priors and likelihood...",
                       end="", flush=True)
-                # Set parameter priors (betas, error)
-                params = pm.Normal(
-                    handyfilesvars.mod_dict[mod]["var_names"][0], 0, 10,
-                    shape=(iot.X.shape[1]))
-                sd = pm.HalfNormal(
-                    handyfilesvars.mod_dict[mod]["var_names"][1], 20)
-                # Likelihood of outcome estimator
-                est = pm.math.dot(iot.X, params)
-                # Likelihood of outcome
-                var = pm.Normal(handyfilesvars.mod_dict[mod]["var_names"][2],
-                                mu=est, sd=sd, observed=iot.Y)
+                if mod != "choice":
+                    # Set parameter priors (betas, error)
+                    params = pm.Normal(
+                        handyfilesvars.mod_dict[mod]["var_names"][0], 0, 10,
+                        shape=(iot.X.shape[1]))
+                    sd = pm.HalfNormal(
+                        handyfilesvars.mod_dict[mod]["var_names"][1], 20)
+                    # Likelihood of outcome estimator
+                    est = pm.math.dot(iot.X, params)
+                    # Likelihood of outcome
+                    var = pm.Normal(
+                        handyfilesvars.mod_dict[mod]["var_names"][2],
+                        mu=est, sd=sd, observed=iot.Y)
+                # HASSAN: Proposed DCE estimation in pymc3 here
+                # based on:http://barnesanalytics.com/bayesian-
+                # logistic-regression-in-python-using-pymc3
+                else:
+                    # Set parameter priors (betas, error); no intercept
+                    params = pm.Normal(
+                        handyfilesvars.mod_dict[mod]["var_names"][0], 0, 10,
+                        shape=(iot.X.shape[1]))
+                    # Likelihood of outcome estimator
+                    est = pm.math.sigmoid(pm.math.dot(iot.X, params))
+                    # Likelihood of outcome
+                    var = pm.Bernoulli(
+                        handyfilesvars.mod_dict[mod]["var_names"][2],
+                        p=est, observed=iot.Y)
                 print("Complete.")
                 # Draw posterior samples
                 trace = pm.sample(chains=2, cores=1, init="advi")
@@ -768,9 +832,12 @@ def main(base_dir):
                 print("Starting " + mod + " sub-model assessment...", end="",
                       flush=True)
                 # Set reference coefficient values, estimated using a
-                # frequentist regression approach
-                refs = list(
-                    dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
+                # frequentist regression approach; N/A for choice model
+                if mod != "choice":
+                    refs = list(
+                        dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
+                else:
+                    refs = None
                 run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
                 print("Complete.")
 
@@ -831,7 +898,8 @@ def main(base_dir):
         print("Complete.")
 
         # Loop through all model types (temperature, demand, co2, lighting)
-        for mod in handyfilesvars.mod_dict.keys():
+        # for mod in handyfilesvars.mod_dict.keys():
+        for mod in ["choice"]:
             print("Loading " + mod + " sub-model...", end="", flush=True)
             # Reload trace
             with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
@@ -845,9 +913,12 @@ def main(base_dir):
                           opts.mod_assess, mod, dat)
 
             # Set reference coefficient values, estimated using a frequentist
-            # regression approach
-            refs = list(
-                dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
+            # regression approach; N/A for choice model
+            if mod != "choice":
+                refs = list(
+                    dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
+            else:
+                refs = None
             run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
             print("Complete.")
     else:
@@ -1305,27 +1376,30 @@ def run_mod_assessment(handyfilesvars, trace, mod, iog, refs):
         "diagnostic_plots", handyfilesvars.mod_dict[mod]["fig_names"][1])
     plt.gcf().savefig(fig2_path)
 
-    # Set testing data
-    iot = ModelIOTest(iog, opts.mod_init, opts.mod_assess)
-    # Re-initialize model with subset of data used for testing (
-    # for model initialization case only)
-    if opts.mod_assess is True:
-        with pm.Model() as var_mod:
-            # Set parameter priors (betas, error)
-            params = pm.Normal(
-                handyfilesvars.mod_dict[mod][
-                    "var_names"][0], 0, 10, shape=(iot.X.shape[1]))
-            sd = pm.HalfNormal(
-                handyfilesvars.mod_dict[mod]["var_names"][1], 20)
-            # Likelihood of outcome estimator
-            est = pm.math.dot(iot.X, params)
-            # Likelihood of outcome
-            var = pm.Normal(
-                handyfilesvars.mod_dict[mod]["var_names"][2],
-                mu=est, sd=sd, observed=np.zeros(iot.X.shape[0]))
+    # Only proceed further with diagnostics for models other than the choice
+    # model (parameter traces/distributions only printed for choice model)
+    if mod != "choice":
+        # Set testing data
+        iot = ModelIOTest(iog, opts.mod_init, opts.mod_assess)
+        # Re-initialize model with subset of data used for testing (
+        # for model initialization case only)
+        if opts.mod_assess is True:
+            with pm.Model() as var_mod:
+                # Set parameter priors (betas, error)
+                params = pm.Normal(
+                    handyfilesvars.mod_dict[mod][
+                        "var_names"][0], 0, 10, shape=(iot.X.shape[1]))
+                sd = pm.HalfNormal(
+                    handyfilesvars.mod_dict[mod]["var_names"][1], 20)
+                # Likelihood of outcome estimator
+                est = pm.math.dot(iot.X, params)
+                # Likelihood of outcome
+                var = pm.Normal(
+                    handyfilesvars.mod_dict[mod]["var_names"][2],
+                    mu=est, sd=sd, observed=np.zeros(iot.X.shape[0]))
+                output_diagnostics(handyfilesvars, trace, iot, mod)
+        else:
             output_diagnostics(handyfilesvars, trace, iot, mod)
-    else:
-        output_diagnostics(handyfilesvars, trace, iot, mod)
 
 
 def output_diagnostics(handyfilesvars, trace, iot, mod):
