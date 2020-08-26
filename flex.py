@@ -126,7 +126,7 @@ class UsefulFilesVars(object):
             lgt_dat = ("data", "test_predict.csv")
         stored_lt = ("model_stored", "lt.pkl")
 
-        # HASSAN: Set DCE input/output file names here
+        # Set DCE input/output file names
         # DCE model is not broken out by building type/vintage
         dce_dat = ("data", "dce_dat.csv")
         stored_dce = ("model_stored", "dce.pkl")
@@ -201,10 +201,11 @@ class UsefulFilesVars(object):
                     'lt_pwr_delt'),
                     (['<U50'] + ['<f8'] * 22)] for n in range(4))
             self.coef_names_dtypes = None
-        # HASSAN: Set DCE model column names and data types
+
+        # Set DCE model column names and data types
         dce_names_dtypes = [(
-            'choice', 'economy', 'pc_tmp', 'tmp', 'lgt', 'oa', 'plug'),
-            (['<f8'] * 7)]
+            'economy', 'pc_tmp_low', 'pc_tmp_high', 'tmp', 'lgt', 'choice',
+            'plug'), (['<f8'] * 7)]
 
         # For each model type, store information on input/output data file
         # names, input/output data file formats, model variables, and
@@ -264,8 +265,6 @@ class UsefulFilesVars(object):
                     "ppcheck_dmd_pc.png", "scatter_dmd_pc.png",
                     "update_dmd_pc.png"]
             },
-            # HASSAN: Store all key info. needed to read in and
-            # assess the DCE model
             "choice": {
                 "io_data": [dce_dat, stored_dce],
                 "io_data_names": dce_names_dtypes,
@@ -345,16 +344,7 @@ class ModelDataLoad(object):
                     "temperature_precool"]["io_data_names"][0],
                 dtype=handyfilesvars.mod_dict[
                     "temperature_precool"]["io_data_names"][1])
-            # Stop routine if files were not properly read in
-            if any([len(x) == 0 for x in [
-                    self.dmd_tmp, self.co2, self.lt, self.pc_dmd_tmp]]):
-                raise ValueError("Failure to read input file(s)")
-            self.coefs = np.genfromtxt(
-                path.join(base_dir, *handyfilesvars.coefs),
-                skip_header=True, delimiter=',',
-                names=handyfilesvars.coef_names_dtypes[0],
-                dtype=handyfilesvars.coef_names_dtypes[1])
-            # HASSAN: Read in data for initializing choice model
+            # Read in data for initializing choice model
             self.choice = np.genfromtxt(
                 path.join(base_dir, *handyfilesvars.mod_dict[
                     "choice"]["io_data"][0]),
@@ -363,6 +353,19 @@ class ModelDataLoad(object):
                     "choice"]["io_data_names"][0],
                 dtype=handyfilesvars.mod_dict[
                     "choice"]["io_data_names"][1])
+            # Stop routine if files were not properly read in
+            if any([len(x) == 0 for x in [
+                    self.dmd_tmp, self.co2, self.lt, self.pc_dmd_tmp,
+                    self.choice]]):
+                raise ValueError("Failure to read input file(s)")
+            # Read in reference frequentist coefs to compare Bayesian estimates
+            # against
+            self.coefs = np.genfromtxt(
+                path.join(base_dir, *handyfilesvars.coefs),
+                skip_header=True, delimiter=',',
+                names=handyfilesvars.coef_names_dtypes[0],
+                dtype=handyfilesvars.coef_names_dtypes[1])
+
         # Data read-in for model re-estimation/prediction is common across
         # model types
         else:
@@ -660,23 +663,27 @@ class ModelIO(object):
                     self.Y_all = data.pc_dmd_tmp['t_in_delt']
                 else:
                     self.Y_all = data.pc_dmd_tmp['dmd_delt_sf']
-        # HASSAN: Initialize input/output variables for choice regression
+        # Initialize input/output variables for choice regression
         elif mod == "choice":
+            # Set train/test data to all data in this case
+            self.train_inds, self.test_inds = ([
+                x for x in range(len(data.choice))] for n in range(2))
             # Economic benefit
             economy = data.choice['economy']
-            # Pre-cooling temp. decrease
-            pc_tmp = data.choice['pc_tmp']
+            # Pre-cooling temp. decrease (<=2 deg F event temp. increase)
+            pc_tmp_l = data.choice['pc_tmp_low']
+            # Pre-cooling temp. decrease (>2  deg F event temp. increase)
+            pc_tmp_h = data.choice['pc_tmp_high']
             # Temp. increase
             tmp = data.choice['tmp']
             # Lighting decrease
             lgt = data.choice['lgt']
-            # Outdoor air decrease
-            oa = data.choice['oa']
             # Plug load decrease
             plug = data.choice['plug']
             # Set model input (X) variables; note, NO INTERCEPT
             self.X_all = np.stack([
-                economy, pc_tmp, tmp, lgt, oa, plug], axis=1)
+                economy, pc_tmp_l, pc_tmp_h, tmp, lgt, plug], axis=1)
+            # Set model output (Y) variable for estimation cases
             self.Y_all = data.choice['choice']
 
 
@@ -789,6 +796,8 @@ def main(base_dir):
             with pm.Model() as var_mod:
                 print("Setting " + mod + " sub-model priors and likelihood...",
                       end="", flush=True)
+                # Handle choice model estimation (logistic regression)
+                # differently than other models (linear regression)
                 if mod != "choice":
                     # Set parameter priors (betas, error)
                     params = pm.Normal(
@@ -802,20 +811,28 @@ def main(base_dir):
                     var = pm.Normal(
                         handyfilesvars.mod_dict[mod]["var_names"][2],
                         mu=est, sd=sd, observed=iot.Y)
-                # HASSAN: Proposed DCE estimation in pymc3 here
-                # based on:http://barnesanalytics.com/bayesian-
+                # Choice model estimation based on:
+                # http://barnesanalytics.com/bayesian-
                 # logistic-regression-in-python-using-pymc3
                 else:
-                    # Set parameter priors (betas, error); no intercept
-                    params = pm.Normal(
+                    # Set parameter priors (betas, error); set informative
+                    # prior (based on DCE future winter experiments) on plug
+                    # load service loss coefficient, and vague priors on all
+                    # other coefficients
+                    params_1 = pm.Normal(
                         handyfilesvars.mod_dict[mod]["var_names"][0], 0, 10,
-                        shape=(iot.X.shape[1]))
-                    # Likelihood of outcome estimator
+                        shape=(iot.X.shape[1] - 1))
+                    params_2 = pm.Normal('plg', -1.25, 0.36, shape=1)
+                    params = tt.tensor.concatenate([
+                        params_1, params_2], axis=0)
+                    # Likelihood of outcome estimator; apply sigmoid function
+                    # for binary logistic regression
                     est = pm.math.sigmoid(pm.math.dot(iot.X, params))
-                    # Likelihood of outcome
+                    # Likelihood of outcome; draw from Bernoulli distribution
+                    # for binary logistic regression
                     var = pm.Bernoulli(
-                        handyfilesvars.mod_dict[mod]["var_names"][2],
-                        p=est, observed=iot.Y)
+                        handyfilesvars.mod_dict[mod]["var_names"][2], p=est,
+                        observed=iot.Y)
                 print("Complete.")
                 # Draw posterior samples
                 trace = pm.sample(chains=2, cores=1, init="advi")
@@ -1377,7 +1394,7 @@ def run_mod_assessment(handyfilesvars, trace, mod, iog, refs):
     plt.gcf().savefig(fig2_path)
 
     # Only proceed further with diagnostics for models other than the choice
-    # model (parameter traces/distributions only printed for choice model)
+    # model (only parameter traces/distributions are printed for choice model)
     if mod != "choice":
         # Set testing data
         iot = ModelIOTest(iog, opts.mod_init, opts.mod_assess)
