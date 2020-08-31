@@ -66,11 +66,11 @@ plt_dmd_pc_fin <- plt_dmd_pc + coord_flip()
 # Reformat and plot the total change in economic benefit data
 # Overall
 cost_dat.m <- melt(cost_dat, id.vars="group")
-plt_cost <- ggplot(cost_dat.m, aes(x=reorder(group, value, FUN=median), y=value)) + geom_boxplot() + ylab("Total Economic Benefit (100$)") + xlab("Candidate Strategy")
+plt_cost <- ggplot(cost_dat.m, aes(x=reorder(group, value, FUN=median), y=value)) + geom_boxplot() + ylab("Total Economic Benefit ($)") + xlab("Candidate Strategy")
 plt_cost_fin <- plt_cost + coord_flip()
 # Precool
 cost_dat_pc.m <- melt(cost_dat_pc, id.vars="group")
-plt_cost_pc <- ggplot(cost_dat_pc.m, aes(x=reorder(group, value, FUN=median), y=value)) + geom_boxplot() + ylab("Total Economic Loss, Pre-Cooling (100$)") + xlab("Candidate Strategy")
+plt_cost_pc <- ggplot(cost_dat_pc.m, aes(x=reorder(group, value, FUN=median), y=value)) + geom_boxplot() + ylab("Total Economic Loss, Pre-Cooling ($)") + xlab("Candidate Strategy")
 plt_cost_pc_fin <- plt_cost_pc + coord_flip()
 
 # Reformat and plot the max change in temperature data

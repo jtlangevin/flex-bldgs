@@ -298,6 +298,10 @@ class ModelDataLoad(object):
             a measure changes the thermostat set point in a current hour.
         tmp_active_prev (numpy ndarray): Data used to determine whether
             a measure changed the thermostat set point in a previous hour.
+        lgt_active (numpy ndarray): Data used to determine whether
+            a measure changes the lighting setting in a current hour.
+        lgt_active_prev (numpy ndarray): Data used to determine whether
+            a measure changed the lighting setting in a previous hour.
     """
 
     def __init__(self, handyfilesvars, mod_init, mod_assess,
@@ -385,6 +389,8 @@ class ModelDataLoad(object):
                 self.strategy = common_data['Name']
                 self.tmp_active = common_data['tsp_delt']
                 self.tmp_active_prev = common_data['tsp_delt_lag']
+                self.lgt_active = common_data['lt_pwr_delt_pct']
+                self.lgt_active_prev = common_data['lt_pwr_delt_pct_lag']
                 self.pc_mag = common_data['pc_tmp_inc']
                 # Set inputs to demand, temperature, co2, lighting, and
                 # pre-cooling models from prediction/estimation input files
@@ -412,6 +418,8 @@ class ModelDataLoad(object):
                     np.where(common_data['tsp_delt'] < 0)]
                 self.tmp_active = common_data['tsp_delt']
                 self.tmp_active_prev = None
+                self.lgt_active = None
+                self.lgt_active_prev = None
                 self.pc_mag = None
                 self.hr = None
                 self.strategy = None
@@ -1150,7 +1158,7 @@ def gen_recs(handyfilesvars, sf):
         # ; reflect DCE units of $100; convert demand from W/sf to kWh/sf
         cost_delt = (
             (pp_dict["demand_precool"]['dmd_pc'] / 1000) * sf *
-            dat.price_delt[inds]) / 100
+            dat.price_delt[inds])
         # Pull changes for each strategy during the pre-cool period directly
         # from the prediction input file
         pc_mags = np.tile(dat.pc_mag[inds], (n_samples, 1))
@@ -1177,8 +1185,9 @@ def gen_recs(handyfilesvars, sf):
         # Set data index that is unique to the current hour
         inds = np.where(dat.hr == hr)
         # Determine which measures affect thermostat set points in the current
-        # hour
+        # hour, and lighting settings in the current hour
         tmp_active_flag = []
+        lgt_active_flag = []
         for mn in names_o:
             inds_tmp = np.where((dat.hr == hr) & (dat.strategy == mn))
             # Measures that do not affect tsp will have the change in
@@ -1188,6 +1197,13 @@ def gen_recs(handyfilesvars, sf):
                 tmp_active_flag.append(0)
             else:
                 tmp_active_flag.append(1)
+            # Measures that do not affect lgt will have the change in
+            # lighting and lag in lighting change vars set to zero
+            if (dat.lgt_active[inds_tmp] == 0) & \
+               (dat.lgt_active_prev[inds_tmp] == 0):
+                lgt_active_flag.append(0)
+            else:
+                lgt_active_flag.append(1)
         for mod in ["demand", "temperature", "lighting"]:
             # Reload trace
             with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
@@ -1201,12 +1217,14 @@ def gen_recs(handyfilesvars, sf):
             for tm in range(len(names_o)):
                 if tmp_active_flag[tm] == 0:
                     pp_dict["temperature"]['ta'][n][tm] = 0
+                if lgt_active_flag[tm] == 0:
+                    pp_dict["lighting"]['lt'][n][tm] = 0
         # Multiply change in demand/sf by sf and price delta to get total
         # cost difference for the operator; reflect DCE units of $100;
         # convert demand from W/sf to kWh/sf
         cost_delt = (
             (pp_dict["demand"]['dmd'] / 1000) * sf *
-            dat.price_delt[inds]) / 100
+            dat.price_delt[inds])
         # Extend oaf delta values for each choice across all samples
         # oaf_delt = np.tile(dat.oaf_delt[inds], (n_samples, 1))
         # Extend plug load delta values for each choice across all samples
