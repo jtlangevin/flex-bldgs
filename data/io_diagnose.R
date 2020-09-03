@@ -102,7 +102,7 @@ if (length(index_thres) != 0){
 }else{
 	threshold = (1 / length(dat_meas))	
 }
-plt_chc <- ggplot(chc_dat.m, aes(x=reorder(group, value, FUN=median), y=value)) + geom_boxplot() + 
+plt_chc <- ggplot(chc_dat.m, aes(x=reorder(group, value, FUN=mean), y=value)) + geom_boxplot() + 
 	geom_point(data=chc_dat_pts, mapping = aes(x = xname, y = ypos), color = "green") +
 	ylab("Selection Probability (frac)") + xlab("Candidate Strategy")
 plt_chc_fin <- plt_chc + coord_flip() + geom_hline(yintercept = threshold, color="red", size=1)

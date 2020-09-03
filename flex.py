@@ -765,9 +765,11 @@ def main(base_dir):
             "Model initialization and re-estimation flags cannot be chosen "
             "at the same time; choose one or the other")
 
-    # Initialize building type and square footage
+    # Initialize building type, square footage, and demand threshold if
+    # applicable
     bldg_type_vint = opts.bldg_type
     sf = opts.bldg_sf
+    dmd_thres = opts.dmd_thres
 
     # Instantiate useful input file and variable data object
     handyfilesvars = UsefulFilesVars(
@@ -949,7 +951,7 @@ def main(base_dir):
         # Generate predictions for a next-day DR event with conditions and
         # candidate strategies described by an updated input file
         # (test_predict.csv, which is loaded into handyfilesvars)
-        predict_out = gen_recs(handyfilesvars, sf)
+        predict_out = gen_recs(handyfilesvars, sf, dmd_thres)
 
         # Write summary dict with predictions out to JSON file
         with open(path.join(
@@ -1040,7 +1042,7 @@ def gen_updates(
     return traces
 
 
-def gen_recs(handyfilesvars, sf):
+def gen_recs(handyfilesvars, sf, dmd_thres):
 
     # Notify user of input data read
     print("Loading input data...")
@@ -1369,6 +1371,15 @@ def gen_recs(handyfilesvars, sf):
     choice_logits = np.transpose(
         np.sum([np.transpose(x_choice[i]) * betas_choice[i] for
                 i in range(len(x_choice))], axis=0))
+    # Force utilities to large negative value for options that don't meet
+    # the demand reduction threshold, when given; (this ensures that these
+    # strategies will never be selected when they don't meet the threshold)
+    if dmd_thres is not None:
+        for ind_n in range(n_samples):
+            for ind_m in range(len(names)):
+                if ((ds_dict_fin["demand"][ind_n][ind_m] * sf) / 1000) < \
+                        dmd_thres:
+                    choice_logits[ind_n][ind_m] = -999
     # Softmax transformation of logits into choice probabilities
     choice_probs = softmax(choice_logits, axis=1)
     # Add choice probabilities to the final variable data dict to write out
@@ -1582,6 +1593,8 @@ if __name__ == '__main__':
     parser.add_argument("--no_base", action="store_true",
                         help="Remove the baseline (do nothing) DR strategy"
                              "from consideration")
+    parser.add_argument("--dmd_thres", type=float,
+                        help="Optional demand reduction threshold (kW)")
     # Object to store all user-specified execution arguments
     opts = parser.parse_args()
     base_dir = getcwd()
