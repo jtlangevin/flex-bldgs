@@ -497,10 +497,10 @@ class ModelIO(object):
             pcool_duration = data.dmd_tmp['pc_length']
             # Magnitude of pre-cooling temperature offset
             pcool_magnitude = data.dmd_tmp['pc_tmp_inc']
-            # OA ventilation fraction reduction
-            oaf_delta = data.dmd_tmp['ven_delt_pct']
-            # OA ventilation fraction reduction lag
-            oaf_delta_lag = data.dmd_tmp['ven_delt_pct_lag']
+            # # OA ventilation fraction reduction
+            # oaf_delta = data.dmd_tmp['ven_delt_pct']
+            # # OA ventilation fraction reduction lag
+            # oaf_delta_lag = data.dmd_tmp['ven_delt_pct_lag']
             # Lighting fraction reduction
             lt_delta = data.dmd_tmp['lt_pwr_delt_pct']
             # Lighting fraction reduction lag
@@ -514,8 +514,8 @@ class ModelIO(object):
             # Initialize interactive terms
             # Temp. set point and lighting difference
             tmp_lt = tmp_delta * lt_delta
-            # Temp. set point and outdoor air fraction difference
-            tmp_oaf = tmp_delta * oaf_delta
+            # # Temp. set point and outdoor air fraction difference
+            # tmp_oaf = tmp_delta * oaf_delta
             # Pre-cool duration, and magnitude
             pcool_interact = pcool_duration * pcool_magnitude
             # Temp. set point difference, outdoor temperature, and DR st. time
@@ -530,9 +530,9 @@ class ModelIO(object):
             # Set model input (X) variables
             self.X_all = np.stack([
                 intercept, temp_out, rh_out, occ_frac, tmp_delta, lt_delta,
-                oaf_delta, plug_delta, dr_start, dr_end, tmp_delta_lag,
-                lt_delta_lag, plug_delta_lag, oaf_delta_lag, pcool_magnitude,
-                pcool_duration, tmp_lt, tmp_oaf,
+                plug_delta, dr_start, dr_end, tmp_delta_lag,
+                lt_delta_lag, plug_delta_lag, pcool_magnitude,
+                pcool_duration, tmp_lt,
                 tmp_out_tmp_delt, tmp_out_dr_start, tmp_delt_dr_start,
                 pcool_interact, tmp_out_tmp_delt_dr_start], axis=1)
             # Set model output (Y) variable for estimation cases
