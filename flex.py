@@ -3,10 +3,11 @@ import pymc3 as pm
 import theano as tt
 from theano.sandbox.rng_mrg import MRG_RandomStreams
 import numpy as np
+import pandas as pd
 from numpy.polynomial.polynomial import polyfit
 from scipy.special import softmax
 from scipy import stats
-from os import getcwd, path
+from os import getcwd, path, remove
 from argparse import ArgumentParser
 import pickle
 import arviz as az
@@ -32,27 +33,33 @@ class UsefulFilesVars(object):
         """Initialize class attributes."""
 
         # Initialize all data input variables as None
-        dmd_tmp_dat, co2_dat, stored_tmp, stored_dmd, \
-            stored_co2, lgt_dat, stored_lt, pc_tmp_dmd_dat, stored_pc_tmp, \
-            stored_pc_dmd = (None for n in range(10))
+        dmd_bl_dat, stored_dmd_bl, dmd_tmp_dat, co2_dat, stored_tmp, \
+            stored_dmd, stored_co2, lgt_dat, stored_lt, pc_tmp_dmd_dat, \
+            stored_pc_tmp, \
+            stored_pc_dmd = (None for n in range(12))
 
         # Set data input and output files for all models
+        # Medium office, >=2004 vintage
         if bldg_type_vint == "mediumofficenew":
             # Handle data inputs differently for model initialization vs.
             # model re-estimation and prediction (the former uses different
             # CSVs for each building type, while the latter will only draw
             # from one CSV)
             if mod_init is True or mod_assess is True:
+                dmd_bl_dat = ("data", "MO_B.csv")
                 dmd_tmp_dat = ("data", "MO_DR_new.csv")
                 co2_dat = ("data", "CO2_MO.csv")
                 pc_tmp_dmd_dat = ("data", "MO_Precooling_new.csv")
             elif mod_est is True:
+                dmd_bl_dat = ("data", "test_update_bl.csv")
                 dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_update.csv") for n in range(3))
             else:
+                dmd_bl_dat = ("data", "test_predict_bl.csv")
                 dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_predict.csv") for n in range(3))
             # Set stored model data files
+            stored_dmd_bl = ("model_stored", "dmd_mo_b.pkl")
             stored_tmp = ("model_stored", "tmp_mo_n.pkl")
             stored_dmd = ("model_stored", "dmd_mo_n.pkl")
             stored_co2 = ("model_stored", "co2_mo.pkl")
@@ -63,15 +70,19 @@ class UsefulFilesVars(object):
         # Medium office, <2004 vintage
         elif bldg_type_vint == "mediumofficeold":
             if mod_init is True or mod_assess is True:
+                dmd_bl_dat = ("data", "MO_B.csv")
                 dmd_tmp_dat = ("data", "MO_DR_old.csv")
                 co2_dat = ("data", "CO2_MO.csv")
                 pc_tmp_dmd_dat = ("data", "MO_Precooling_old.csv")
             elif mod_est is True:
+                dmd_bl_dat = ("data", "test_update_bl.csv")
                 dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_update.csv") for n in range(3))
             else:
+                dmd_bl_dat = ("data", "test_predict_bl.csv")
                 dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_predict.csv") for n in range(3))
+            stored_dmd_bl = ("model_stored", "dmd_mo_b.pkl")
             stored_tmp = ("model_stored", "tmp_mo_o.pkl")
             stored_dmd = ("model_stored", "dmd_mo_o.pkl")
             stored_co2 = ("model_stored", "co2_mo.pkl")
@@ -82,15 +93,19 @@ class UsefulFilesVars(object):
         # Retail, >=2004 vintage
         elif bldg_type_vint == "retailnew":
             if mod_init is True or mod_assess is True:
+                dmd_bl_dat = ("data", "Retail_B.csv")
                 dmd_tmp_dat = ("data", "Retail_DR_new.csv")
                 co2_dat = ("data", "CO2_Retail.csv")
                 pc_tmp_dmd_dat = ("data", "Retail_Precooling_new.csv")
             elif mod_est is True:
+                dmd_bl_dat = ("data", "test_update_bl.csv")
                 dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_update.csv") for n in range(3))
             else:
+                dmd_bl_dat = ("data", "test_predict_bl.csv")
                 dmd_tmp_dat, co2_datm, pc_tmp_dmd_dat = (
                     ("data", "test_predict.csv") for n in range(3))
+            stored_dmd_bl = ("model_stored", "dmd_ret_b.pkl")
             stored_tmp = ("model_stored", "tmp_ret_n.pkl")
             stored_dmd = ("model_stored", "dmd_ret_n.pkl")
             stored_co2 = ("model_stored", "co2_ret.pkl")
@@ -98,18 +113,22 @@ class UsefulFilesVars(object):
             stored_pc_dmd = ("model_stored", "pc_dmd_ret_n.pkl")
             # Regression coefficients
             self.coefs = ("data", "coefs_ret_n.csv")
-        # Medium office, <2004 vintage
+        # Retail, <2004 vintage
         elif bldg_type_vint == "retailold":
             if mod_init is True or mod_assess is True:
+                dmd_bl_dat = ("data", "Retail_B.csv")
                 dmd_tmp_dat = ("data", "Retail_DR_old.csv")
                 co2_dat = ("data", "CO2_Retail.csv")
                 pc_tmp_dmd_dat = ("data", "Retail_Precooling_old.csv")
             elif mod_est is True:
+                dmd_bl_dat = ("data", "test_update_bl.csv")
                 dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_update.csv") for n in range(3))
             else:
+                dmd_bl_dat = ("data", "test_predict_bl.csv")
                 dmd_tmp_dat, co2_dat, pc_tmp_dmd_dat = (
                     ("data", "test_predict.csv") for n in range(3))
+            stored_dmd_bl = ("model_stored", "dmd_ret_b.pkl")
             stored_tmp = ("model_stored", "tmp_ret_o.pkl")
             stored_dmd = ("model_stored", "dmd_ret_o.pkl")
             stored_co2 = ("model_stored", "co2_ret.pkl")
@@ -135,6 +154,14 @@ class UsefulFilesVars(object):
         # initialization; these are different by model type (though the same
         # for the temperature and demand models, which draw from the same CSV)
         if mod_init is True or mod_assess is True:
+            dmd_bl_names_dtypes = [
+                ('id', 'vintage', 'day_typ', 'hour_number', 'climate',
+                 'dmd_sf', 't_out', 'rh_out', 'occ_frac',
+                 'v1980', 'v2004', 'v2010', 'v19802004',
+                 'cz_2A', 'cz_2B', 'cz_3A', 'cz_3B', 'cz_3C',
+                 'cz_4A', 'cz_4B', 'cz_4C', 'cz_5A', 'cz_5B',
+                 'cz_6A', 'cz_6B', 'cz_7A'),
+                (['<i4'] * 4 + ['<U25'] + ['<f8'] * 4 + ['<i4'] * 17)]
             tmp_dmd_names_dtypes = [
                 ('id', 'vintage', 'day_typ', 'hour', 'climate',
                  'dmd_delt_sf', 't_in_delt', 'rh_in_delt', 't_out', 'rh_out',
@@ -166,11 +193,19 @@ class UsefulFilesVars(object):
                  'ven_delt_pct_lag'),
                 (['<i4'] * 4 + ['<U25'] + ['<f8'] * 19)]
             self.coef_names_dtypes = [
-                ('demand_base', 'demand', 'temperature', 'co2', 'lighting',
+                ('demand_bl', 'demand', 'temperature', 'co2', 'lighting',
                  'temperature_precool', 'demand_precool'), (['<f8'] * 7)]
         # Set data input file column names and data types for model
         # re-estimation; these will be the same across models
         elif mod_est is True:
+            dmd_bl_names_dtypes = [
+                ('id', 'vintage', 'day_typ', 'day_num', 'hour_number',
+                 'climate', 'dmd_sf', 't_out', 'rh_out', 'occ_frac',
+                 'v1980', 'v2004', 'v2010', 'v19802004',
+                 'cz_2A', 'cz_2B', 'cz_3A', 'cz_3B', 'cz_3C',
+                 'cz_4A', 'cz_4B', 'cz_4C', 'cz_5A', 'cz_5B',
+                 'cz_6A', 'cz_6B', 'cz_7A'),
+                (['<i4'] * 5 + ['<U25'] + ['<f8'] * 4 + ['<i4'] * 17)]
             tmp_dmd_names_dtypes, co2_names_dtypes, lt_names_dtypes, \
                 pc_tmp_dmd_names_dtypes = (
                     [('id', 'vintage', 'day_typ', 'day_num', 'hour', 'climate',
@@ -188,6 +223,15 @@ class UsefulFilesVars(object):
         # Set data input file column names and data types for model
         # prediction; these will be the same across models
         else:
+            dmd_bl_names_dtypes = [
+                ('Hr', 'vintage', 'hour_number', 'climate',
+                 't_out', 'rh_out', 'occ_frac',
+                 'v1980', 'v2004', 'v2010', 'v19802004',
+                 'cz_2A', 'cz_2B', 'cz_3A', 'cz_3B', 'cz_3C',
+                 'cz_4A', 'cz_4B', 'cz_4C', 'cz_5A', 'cz_5B',
+                 'cz_6A', 'cz_6B', 'cz_7A'),
+                (['<i4'] + ['<f8'] + ['<i4'] + ['<U25'] + ['<f8'] * 3 +
+                 ['<i4'] * 17)]
             tmp_dmd_names_dtypes, co2_names_dtypes, lt_names_dtypes, \
                 pc_tmp_dmd_names_dtypes = ([(
                     'Name', 'Hr', 't_out', 'rh_out', 'lt_nat',
@@ -219,6 +263,15 @@ class UsefulFilesVars(object):
                     "traceplots_tmp.png", "postplots_tmp.png",
                     "ppcheck_tmp.png", "scatter_tmp.png",
                     "update_tmp.png"]
+            },
+            "demand_bl": {
+                "io_data": [dmd_bl_dat, stored_dmd_bl],
+                "io_data_names": dmd_bl_names_dtypes,
+                "var_names": ['dmd_bl_params', 'dmd_bl_sd', 'dmd_bl'],
+                "fig_names": [
+                    "traceplots_dmd_bl.png", "postplots_dmd_bl.png",
+                    "ppcheck_dmd_bl.png", "scatter_dmd_bl.png",
+                    "update_dmd_bl.png"]
             },
             "demand": {
                 "io_data": [dmd_tmp_dat, stored_dmd],
@@ -314,6 +367,16 @@ class ModelDataLoad(object):
         # Data read-in for model initialization is specific to each type
         # of model (though demand/temperature share the same input data);
         if mod_init is True or mod_assess is True:
+            # Read in data for initializing baseline demand model
+            self.dmd_bl = np.genfromtxt(
+                path.join(base_dir,
+                          *handyfilesvars.mod_dict[
+                            "demand_bl"]["io_data"][0]),
+                skip_header=True, delimiter=',',
+                names=handyfilesvars.mod_dict[
+                    "demand_bl"]["io_data_names"][0],
+                dtype=handyfilesvars.mod_dict[
+                    "demand_bl"]["io_data_names"][1])
             # Read in data for initializing demand/temperature models
             self.dmd_tmp = np.genfromtxt(
                 path.join(base_dir,
@@ -359,8 +422,8 @@ class ModelDataLoad(object):
                     "choice"]["io_data_names"][1])
             # Stop routine if files were not properly read in
             if any([len(x) == 0 for x in [
-                    self.dmd_tmp, self.co2, self.lt, self.pc_dmd_tmp,
-                    self.choice]]):
+                    self.dmd_bl, self.dmd_tmp, self.co2, self.lt,
+                    self.pc_dmd_tmp, self.choice]]):
                 raise ValueError("Failure to read input file(s)")
             # Read in reference frequentist coefs to compare Bayesian estimates
             # against
@@ -369,10 +432,20 @@ class ModelDataLoad(object):
                 skip_header=True, delimiter=',',
                 names=handyfilesvars.coef_names_dtypes[0],
                 dtype=handyfilesvars.coef_names_dtypes[1])
-
         # Data read-in for model re-estimation/prediction is common across
         # model types
         else:
+            # Read in data for baseline demand model
+            dmd_bl = np.genfromtxt(
+                path.join(base_dir,
+                          *handyfilesvars.mod_dict[
+                            "demand_bl"]["io_data"][0]),
+                skip_header=True, delimiter=',',
+                names=handyfilesvars.mod_dict[
+                    "demand_bl"]["io_data_names"][0],
+                dtype=handyfilesvars.mod_dict[
+                    "demand_bl"]["io_data_names"][1])
+            # Read in data for other DR model types
             common_data = np.genfromtxt(
                 path.join(base_dir,
                           *handyfilesvars.mod_dict[
@@ -385,6 +458,7 @@ class ModelDataLoad(object):
             # Restrict prediction input file to appropriate prediction or
             # model estimation update data (if applicable)
             if mod_est is False:
+                self.hr_bl = dmd_bl['Hr']
                 self.hr = common_data['Hr']
                 self.strategy = common_data['Name']
                 self.tmp_active = common_data['tsp_delt']
@@ -392,22 +466,30 @@ class ModelDataLoad(object):
                 self.lgt_active = common_data['lt_pwr_delt_pct']
                 self.lgt_active_prev = common_data['lt_pwr_delt_pct_lag']
                 self.pc_mag = common_data['pc_tmp_inc']
+                # Set inputs to baseline demand model
+                # from prediction/estimation input files
+                self.dmd_bl = dmd_bl
                 # Set inputs to demand, temperature, co2, lighting, and
                 # pre-cooling models from prediction/estimation input files
                 self.dmd_tmp, self.co2, self.lt, self.pc_dmd_tmp = (
                     common_data for n in range(4))
             elif mod_est is True:
                 if update_days is None:
+                    self.event_days_bl = np.unique(dmd_bl['day_num'])
                     self.event_days = np.unique(common_data['day_num'])
                 else:
-                    self.event_days = list(
-                        range(update_days[0], update_days[1] + 1))
+                    self.event_days_bl, self.event_days = (list(
+                        range(update_days[0], update_days[1] + 1)) for
+                        n in range(2))
+                dmd_bl = dmd_bl[
+                    np.in1d(dmd_bl['day_num'], self.event_days_bl)]
                 common_data = common_data[
                     np.in1d(common_data['day_num'], self.event_days)]
                 # Set inputs to demand, temperature, co2, lighting, and
                 # pre-cooling models from prediction/estimation input files
                 # Note: DR period data are flagged by rows where the set point
                 # temperature change is greater than or equal to zero
+                self.dmd_bl = dmd_bl
                 self.dmd_tmp, self.co2, self.lt = (
                     common_data[
                         np.where(common_data['tsp_delt'] >= 0)] for
@@ -463,7 +545,70 @@ class ModelIO(object):
         else:
             train_pct = None
 
-        if mod == "temperature" or mod == "demand":
+        if mod == "demand_bl":
+            # If model is being initialized and model assessment is requested,
+            # or previously initialized model is being assessed,
+            # set training/testing indices to use on the demand_bl. data
+            if (mod_init is True and mod_assess is True) or mod_assess is True:
+                # Set training indices
+                self.train_inds = np.random.randint(
+                    0, len(data.dmd_bl),
+                    size=int(len(data.dmd_bl) * train_pct))
+                # Set testing indices
+                self.test_inds = [
+                    x for x in range(len(data.dmd_bl)) if
+                    x not in self.train_inds]
+
+            # Initialize variables for baseline demand model
+
+            # Whole building occupancy fraction
+            occ_frac = data.dmd_bl['occ_frac']
+            # Outdoor air temperature
+            temp_out = data.dmd_bl['t_out']
+            # Outdoor relative humidity
+            rh_out = data.dmd_bl['rh_out']
+            # Number of hour
+            hour_number = data.dmd_bl['hour_number']
+            # Climate zones
+            climate_zone = data.dmd_bl['climate']
+            # Vintages
+            vintage = data.dmd_bl['vintage']
+            # Set a vector of ones for intercept estimation
+            intercept = np.ones(len(occ_frac))
+            # Categorical variables for Climate zones
+            cz_2A = data.dmd_bl['cz_2A']
+            cz_2B = data.dmd_bl['cz_2B']
+            cz_3A = data.dmd_bl['cz_3A']
+            cz_3B = data.dmd_bl['cz_3B']
+            cz_3C = data.dmd_bl['cz_3C']
+            cz_4A = data.dmd_bl['cz_4A']
+            cz_4B = data.dmd_bl['cz_4B']
+            cz_4C = data.dmd_bl['cz_4C']
+            cz_5A = data.dmd_bl['cz_5A']
+            cz_5B = data.dmd_bl['cz_5B']
+            cz_6A = data.dmd_bl['cz_6A']
+            cz_6B = data.dmd_bl['cz_6B']
+            cz_7A = data.dmd_bl['cz_7A']
+            # Categorical variables for Vintages
+            v_1980 = data.dmd_bl['v1980']
+            v_2004 = data.dmd_bl['v2004']
+            v_2010 = data.dmd_bl['v2010']
+            v_19802004 = data.dmd_bl['v19802004']
+            # Outdoor temperature, outdoor relative humidity
+            tmp_out_rh_out = temp_out * rh_out
+
+            # Set model input (X) variables
+            self.X_all = np.stack([
+                intercept, temp_out, rh_out,
+                v_19802004, v_2004, v_2010,
+                cz_2B, cz_3A, cz_3B, cz_3C, cz_4A, cz_4B,
+                cz_4C, cz_5A, cz_5B, cz_6A, cz_6B, cz_7A,
+                occ_frac, hour_number, tmp_out_rh_out], axis=1)
+            # Set model output (Y) variable for estimation cases
+            if mod_init is True or mod_est is True or mod_assess is True:
+                self.Y_all = data.dmd_bl['dmd_sf']
+
+        elif mod == "temperature" or mod == "demand":
             # If model is being initialized and model assessment is requested,
             # or previously initialized model is being assessed,
             # set training/testing indices to use on the demand/temp. data
@@ -886,7 +1031,7 @@ def main(base_dir):
 
         # Initialize blank traces lists for the first update to each mod type
         if not traces:
-            traces = {"demand": [], "temperature": []}
+            traces = {"demand_bl": [], "demand": [], "temperature": []}
         # Determine model types to update (demand and temperature if no
         # precooling is indicated by the input data (TSP<0), otherwise add
         # precooling demand and temperature models)
@@ -894,9 +1039,10 @@ def main(base_dir):
         if any(dat.tmp_active < 0):
             # mod_update_list = ["demand", "temperature", "demand_precool",
             #                    "temperature_precool"]
-            mod_update_list = ["demand", "temperature", "demand_precool"]
+            mod_update_list = [
+                "demand_bl", "demand", "temperature", "demand_precool"]
         else:
-            mod_update_list = ["demand", "temperature"]
+            mod_update_list = ["demand_bl", "demand", "temperature"]
 
         # Loop through model updates
         for mod in mod_update_list:
@@ -947,6 +1093,61 @@ def main(base_dir):
                 refs = None
             run_mod_assessment(handyfilesvars, trace, mod, iog, refs)
             print("Complete.")
+
+    elif opts.base_pred is True:
+
+        # Notify user of input data read
+        print("Loading input data...")
+        # Read-in input data for scenario
+        dat = ModelDataLoad(
+            handyfilesvars, opts.mod_init, opts.mod_assess,
+            opts.mod_est, update_days=None)
+        # Set number of samples to draw. for predictions
+        n_samples = 1000
+        # Initialize posterior predictive data dict
+        pp_dict = {
+            key: [] for key in handyfilesvars.mod_dict.keys()}
+        # Make hourly baseline predictions
+        print('Making baseline predictions...')
+        # Predict the baseline demand and output
+        with open(path.join(base_dir, *handyfilesvars.mod_dict['demand_bl'][
+                "io_data"][1]), 'rb') as store:
+            trace = pickle.load(store)['trace']
+            pp_dict['demand_bl'] = run_mod_prediction_bl(
+                    handyfilesvars, trace, 'demand_bl', dat, n_samples)
+        predict_bl = pp_dict["demand_bl"]
+        # Write predicted baseline demand value out to csv file
+        predict_csv = path.join(base_dir, "data", "base_predict_byhr.csv")
+        # THIS MAY NOT BE NECESSARY
+        if path.exists(predict_csv):
+            remove(predict_csv)
+        # Write header string for output file with full hourly base predictions
+        header_str = ""
+        for x in range(predict_bl['dmd_bl'].shape[1]):
+            header_str = header_str + ("Hour " + str(x+1) + ",")
+        # Save full hourly baseline predictions (all samples) to CSV
+        np.savetxt(predict_csv, predict_bl['dmd_bl'], delimiter=",",
+                   header=header_str, comments='')
+        # Convert full hourly baseline predictions to pandas DF
+        predict_out_bl = pd.DataFrame(predict_bl['dmd_bl'])
+        # Calculate summary statistics (mean and SD of full samples of base
+        # demand predictions for each hour)
+        mean = []
+        std = []
+        for i in range(len(predict_out_bl.columns)):
+            Hr = predict_out_bl.iloc[:, [i]].values
+            mean.append(np.mean(Hr))
+            std.append(np.std(Hr))
+        df_bl = pd.DataFrame(
+            {'Hour': dat.hr_bl, 'Mean': mean, 'Standard Deviation': std})
+        # Write summary stats to CSV
+        predict_csv_sum = path.join(
+            base_dir, "data", "base_predict_summary.csv")
+        df_bl.to_csv(predict_csv_sum, sep=',', index=False)
+        # Notify user of completed execution
+        print("Complete (see './data/base_predict_summary.csv' and "
+              "'./data/base_predict_byhr.csv' files.)")
+
     else:
         # Generate predictions for a next-day DR event with conditions and
         # candidate strategies described by an updated input file
@@ -1058,10 +1259,10 @@ def gen_recs(handyfilesvars, sf, dmd_thres):
     names_pc = dat.strategy[np.where(dat.hr == -1)]
     # Find names of candidate DR strategies (without baseline option)
     names_o = dat.strategy[np.where(dat.hr == 1)]
-    # Add baseline (do nothing) option to the set of names to write out, unless
-    # the user has restricted the baseline option from consideration; attach
-    # a default tag if no other strategy names are tagged as the default
-    if opts.no_base is not True:
+    # Add baseline (do nothing) option to the set of names to write out if
+    # desired by the user; attach a default tag to baseline if no other
+    # strategy names are tagged as the default
+    if opts.null_strategy is True:
         default_flag = np.where(np.char.find(names_o, "(D)") != -1)
         if len(default_flag[0]) != 0:
             names = np.append(names_o, "Baseline - Do Nothing")
@@ -1444,6 +1645,30 @@ def run_mod_prediction(handyfilesvars, trace, mod, dat, n_samples, inds):
     return ppc
 
 
+def run_mod_prediction_bl(handyfilesvars, trace, mod, dat, n_samples):
+    # Initialize variable inputs and outputs for the given model type
+    iop = ModelIO(handyfilesvars, opts.mod_init, opts.mod_est,
+                  opts.mod_assess, mod, dat)
+    with pm.Model() as var_mod:
+        # Set parameter priors (betas, error)
+        params = pm.Normal(
+            handyfilesvars.mod_dict[mod][
+                "var_names"][0], 0, 10, shape=(iop.X_all.shape[1]))
+        sd = pm.HalfNormal(
+            handyfilesvars.mod_dict[mod]["var_names"][1], 20)
+        # Likelihood of outcome estimator
+        est = pm.math.dot(iop.X_all, params)
+        # Likelihood of outcome
+        var = pm.Normal(
+            handyfilesvars.mod_dict[mod]["var_names"][2],
+            mu=est, sd=sd, observed=np.zeros(iop.X_all.shape[0]))
+        # Sample predictions for trace
+        ppc = pm.sample_posterior_predictive(
+            trace, samples=n_samples)
+
+    return ppc
+
+
 def run_mod_assessment(handyfilesvars, trace, mod, iog, refs):
 
     # Plot parameter traces
@@ -1583,6 +1808,8 @@ if __name__ == '__main__':
                         help="Re-estimate a model")
     parser.add_argument("--mod_assess", action="store_true",
                         help="Assess a model")
+    parser.add_argument("--base_pred", action="store_true",
+                        help="Make base-case demand predictions")
     # Required flags for building type and size
     parser.add_argument("--bldg_type", required=True, type=str,
                         choices=["mediumofficenew", "mediumofficeold",
@@ -1590,9 +1817,8 @@ if __name__ == '__main__':
                         help="Building type/vintage")
     parser.add_argument("--bldg_sf", required=True, type=int,
                         help="Building square footage")
-    parser.add_argument("--no_base", action="store_true",
-                        help="Remove the baseline (do nothing) DR strategy"
-                             "from consideration")
+    parser.add_argument("--null_strategy", action="store_true",
+                        help="Add the baseline (do nothing) DR strategy")
     parser.add_argument("--dmd_thres", type=float,
                         help="Optional demand reduction threshold (kW)")
     # Object to store all user-specified execution arguments
