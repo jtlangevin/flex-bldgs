@@ -186,5 +186,26 @@ epub_title = project
 # A list of files that should not be packed into the epub file.
 epub_exclude_files = ['search.html']
 
+# Example configuration for intersphinx: refer to the Python standard library.
+intersphinx_mapping = {'https://docs.python.org/3': None}
+
+
+# -- CUSTOM CONFIGURATION OPTIONS -----------------------------------------
+
+# Set up common substitutions to be available throughout the documentation
+rst_prolog = """
+.. |CO2| replace:: CO\ :sub:`2`
+.. |html-filepath| raw:: html
+
+   <span class="filepath">
+
+.. |html-fp-end| raw:: html
+
+   </span>
+
+"""
+
+# Turn on figure numbering for HTML and LaTeX output
+numfig = True
 
 # -- Extension configuration -------------------------------------------------
