@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import pymc3 as pm
 import theano as tt
-from theano.sandbox.rng_mrg import MRG_RandomStreams
+from theano.sandbox.rng_mrg import MRG_RandomStream
 import numpy as np
 import pandas as pd
 # from numpy.polynomial.polynomial import polyfit
@@ -49,7 +49,7 @@ class UsefulFilesVars(object):
                 dmd_bl_dat = ("data", "MO_B.csv")
                 dmd_therm_dat = ("data", "MO_Thermal_Demand_new.csv")
                 dmd_ntherm_dat = ("data", "MO_Nonthermal_Demand_new.csv")
-                tmp_dat = ("data", "MO_Temperature_new_c50.csv")
+                tmp_dat = ("data", "MO_Temperature_new.csv")
                 pc_dmd_dat = ("data", "MO_PC_Demand_new.csv")
             elif mod_est is True:
                 dmd_bl_dat = ("data", "test_update_bl.csv")
@@ -73,7 +73,7 @@ class UsefulFilesVars(object):
                 dmd_bl_dat = ("data", "MO_B.csv")
                 dmd_therm_dat = ("data", "MO_Thermal_Demand_old.csv")
                 dmd_ntherm_dat = ("data", "MO_Nonthermal_Demand_old.csv")
-                tmp_dat = ("data", "MO_Temperature_old_c50.csv")
+                tmp_dat = ("data", "MO_Temperature_old.csv")
                 pc_dmd_dat = ("data", "MO_PC_Demand_old.csv")
             elif mod_est is True:
                 dmd_bl_dat = ("data", "test_update_bl.csv")
@@ -97,7 +97,7 @@ class UsefulFilesVars(object):
                 dmd_bl_dat = ("data", "SR_B.csv")
                 dmd_therm_dat = ("data", "SR_Thermal_Demand_new.csv")
                 dmd_ntherm_dat = ("data", "SR_Nonthermal_Demand_new.csv")
-                tmp_dat = ("data", "SR_Temperature_new_c50.csv")
+                tmp_dat = ("data", "SR_Temperature_new.csv")
                 pc_dmd_dat = ("data", "SR_PC_Demand_new.csv")
             elif mod_est is True:
                 dmd_bl_dat = ("data", "test_update_bl.csv")
@@ -121,7 +121,7 @@ class UsefulFilesVars(object):
                 dmd_bl_dat = ("data", "SR_B.csv")
                 dmd_therm_dat = ("data", "SR_Thermal_Demand_old.csv")
                 dmd_ntherm_dat = ("data", "SR_Nonthermal_Demand_old.csv")
-                tmp_dat = ("data", "SR_Temperature_old_c50.csv")
+                tmp_dat = ("data", "SR_Temperature_old.csv")
                 pc_dmd_dat = ("data", "SR_PC_Demand_old.csv")
             elif mod_est is True:
                 dmd_bl_dat = ("data", "test_update_bl.csv")
@@ -145,7 +145,7 @@ class UsefulFilesVars(object):
                 dmd_bl_dat = ("data", "MO_B.csv")  # ***** UPDATE *****
                 dmd_therm_dat = ("data", "LO_Thermal_Demand_new.csv")
                 dmd_ntherm_dat = ("data", "LO_Nonthermal_Demand_new.csv")
-                tmp_dat = ("data", "LO_Temperature_new_c50.csv")
+                tmp_dat = ("data", "LO_Temperature_new.csv")
                 pc_dmd_dat = ("data", "LO_PC_Demand_new.csv")
             elif mod_est is True:
                 dmd_bl_dat = ("data", "test_update_bl.csv")
@@ -169,7 +169,7 @@ class UsefulFilesVars(object):
                 dmd_bl_dat = ("data", "MO_B.csv")  # ***** UPDATE *****
                 dmd_therm_dat = ("data", "LO_Thermal_Demand_old.csv")
                 dmd_ntherm_dat = ("data", "LO_Nonthermal_Demand_old.csv")
-                tmp_dat = ("data", "LO_Temperature_old_c50.csv")
+                tmp_dat = ("data", "LO_Temperature_old.csv")
                 pc_dmd_dat = ("data", "LO_PC_Demand_old.csv")
             elif mod_est is True:
                 dmd_bl_dat = ("data", "test_update_bl.csv")
@@ -187,13 +187,63 @@ class UsefulFilesVars(object):
             stored_pc_dmd = ("model_stored", "pc_dmd_lo_o.pkl")
             # Regression coefficients
             self.coefs = ("data", "coefs_lo_o.csv")
+        # Large office (all-electric), >=2004 vintage
+        elif bldg_type_vint == "largeofficenew_elec":
+            if mod_init is True or mod_assess is True:
+                dmd_bl_dat = ("data", "MO_B.csv")  # ***** UPDATE *****
+                dmd_therm_dat = ("data", "LO_allElec_Thermal_Demand_new.csv")
+                dmd_ntherm_dat = (
+                    "data", "LO_allElec_Nonthermal_Demand_new.csv")
+                tmp_dat = ("data", "LO_allElec_Temperature_new.csv")
+                pc_dmd_dat = ("data", "LO_allElec_PC_Demand_new.csv")
+            elif mod_est is True:
+                dmd_bl_dat = ("data", "test_update_bl.csv")
+                dmd_therm_dat, dmd_ntherm_dat, tmp_dat, pc_dmd_dat = (
+                    ("data", "test_update.csv") for n in range(4))
+            else:
+                dmd_bl_dat = ("data", "test_predict_bl.csv")
+                dmd_therm_dat, dmd_ntherm_dat, tmp_dat, pc_dmd_dat = (
+                    ("data", "test_predict.csv") for n in range(4))
+            # Set stored model data files
+            stored_dmd_bl = ("model_stored", "dmd_lo_allelec_b.pkl")
+            stored_dmd_therm = ("model_stored", "dmd_therm_lo_allelec_n.pkl")
+            stored_dmd_ntherm = ("model_stored", "dmd_ntherm_lo_allelec_n.pkl")
+            stored_tmp = ("model_stored", "tmp_lo_allelec_n.pkl")
+            stored_pc_dmd = ("model_stored", "pc_dmd_lo_allelec_n.pkl")
+            # Regression coefficients
+            self.coefs = ("data", "coefs_lo_elec_n.csv")
+        # Large office (all-electric), <2004 vintage
+        elif bldg_type_vint == "largeofficeold_elec":
+            if mod_init is True or mod_assess is True:
+                dmd_bl_dat = ("data", "MO_B.csv")  # ***** UPDATE *****
+                dmd_therm_dat = ("data", "LO_allElec_Thermal_Demand_old.csv")
+                dmd_ntherm_dat = (
+                    "data", "LO_allElec_Nonthermal_Demand_old.csv")
+                tmp_dat = ("data", "LO_allElec_Temperature_old.csv")
+                pc_dmd_dat = ("data", "LO_allElec_PC_Demand_old.csv")
+            elif mod_est is True:
+                dmd_bl_dat = ("data", "test_update_bl.csv")
+                dmd_therm_dat, dmd_ntherm_dat, tmp_dat, pc_dmd_dat = (
+                    ("data", "test_update.csv") for n in range(4))
+            else:
+                dmd_bl_dat = ("data", "test_predict_bl.csv")
+                dmd_therm_dat, dmd_ntherm_dat, tmp_dat, pc_dmd_dat = (
+                    ("data", "test_predict.csv") for n in range(4))
+            # Set stored model data files
+            stored_dmd_bl = ("model_stored", "dmd_lo_allelec_b.pkl")
+            stored_dmd_therm = ("model_stored", "dmd_therm_lo_allelec_o.pkl")
+            stored_dmd_ntherm = ("model_stored", "dmd_ntherm_lo_allelec_o.pkl")
+            stored_tmp = ("model_stored", "tmp_lo_allelec_o.pkl")
+            stored_pc_dmd = ("model_stored", "pc_dmd_lo_allelec_o.pkl")
+            # Regression coefficients
+            self.coefs = ("data", "coefs_lo_elec_o.csv")
         # Big box retail, 2004 vintage
         elif bldg_type_vint == "bigboxretail":
             if mod_init is True or mod_assess is True:
                 dmd_bl_dat = ("data", "SR_B.csv")  # ***** UPDATE *****
                 dmd_therm_dat = ("data", "BBR_Thermal_Demand_new.csv")
                 dmd_ntherm_dat = ("data", "BBR_Nonthermal_Demand_new.csv")
-                tmp_dat = ("data", "BBR_Temperature_new_c50.csv")
+                tmp_dat = ("data", "BBR_Temperature_new.csv")
                 pc_dmd_dat = ("data", "BBR_PC_Demand_new.csv")
             elif mod_est is True:
                 dmd_bl_dat = ("data", "test_update_bl.csv")
@@ -302,7 +352,7 @@ class UsefulFilesVars(object):
                 "fig_names": [
                     "traceplots_dmd_bl.png", "postplots_dmd_bl.png",
                     "ppcheck_dmd_bl.png", "scatter_dmd_bl.png",
-                    "update_dmd_bl.png", "shape_dmd_bl.png"]
+                    "update_dmd_bl.png"]
             },
             "demand_therm": {
                 "io_data": [dmd_therm_dat, stored_dmd_therm],
@@ -313,7 +363,7 @@ class UsefulFilesVars(object):
                 "fig_names": [
                     "traceplots_dmd_therm.png", "postplots_dmd_therm.png",
                     "ppcheck_dmd_therm.png", "scatter_dmd_therm.png",
-                    "update_dmd_therm.png", "shape_dmd_therm.png"]
+                    "update_dmd_therm.png"]
             },
             "demand_ntherm": {
                 "io_data": [dmd_ntherm_dat, stored_dmd_ntherm],
@@ -324,7 +374,7 @@ class UsefulFilesVars(object):
                 "fig_names": [
                     "traceplots_dmd_ntherm.png", "postplots_dmd_ntherm.png",
                     "ppcheck_dmd_ntherm.png", "scatter_dmd_ntherm.png",
-                    "update_dmd_ntherm.png", "shape_dmd_ntherm.png"]
+                    "update_dmd_ntherm.png"]
             },
             "temperature": {
                 "io_data": [tmp_dat, stored_tmp],
@@ -335,7 +385,7 @@ class UsefulFilesVars(object):
                 "fig_names": [
                     "traceplots_tmp.png", "postplots_tmp.png",
                     "ppcheck_tmp.png", "scatter_tmp.png",
-                    "update_tmp.png", "shape_tmp.png"]
+                    "update_tmp.png"]
             },
             "demand_precool": {
                 "io_data": [pc_dmd_dat, stored_pc_dmd],
@@ -346,7 +396,7 @@ class UsefulFilesVars(object):
                 "fig_names": [
                     "traceplots_dmd_pc.png", "postplots_dmd_pc.png",
                     "ppcheck_dmd_pc.png", "scatter_dmd_pc.png",
-                    "update_dmd_pc.png", "shape_dmd_pc.png"]
+                    "update_dmd_pc.png"]
             },
             "choice": {
                 "io_data": [dce_dat, stored_dce],
@@ -950,7 +1000,7 @@ def main(base_dir):
 
     # Set numpy and theano RNG seeds for consistency across runs
     np.random.seed(123)
-    th_rng = MRG_RandomStreams()
+    th_rng = MRG_RandomStream()
     th_rng.seed(123)
 
     # Proceed with model inference only if user flags doing so; otherwise,
@@ -1019,7 +1069,9 @@ def main(base_dir):
                         observed=iot.Y)
                 print("Complete.")
                 # Draw posterior samples
-                trace = pm.sample(chains=2, cores=1, init="advi")
+                trace = pm.sample(
+                    chains=2, cores=1, init="advi",
+                    return_inferencedata=False)
 
             # Store model, trace, and predictor variables
             with open(path.join(base_dir, *handyfilesvars.mod_dict[mod][
@@ -1251,7 +1303,8 @@ def gen_updates(
             mu=est, sd=sd, observed=iot.Y)
         print("Complete.")
         # Draw posterior samples to yield a new trace
-        trace = pm.sample(chains=2, cores=1, init="advi")
+        trace = pm.sample(chains=2, cores=1, init="advi",
+                          return_inferencedata=False)
         # Append current updates' traces to the traces from
         # all previous updates
         traces.append(trace)
@@ -1697,13 +1750,13 @@ def run_mod_prediction_bl(handyfilesvars, trace, mod, dat, n_samples):
 def run_mod_assessment(handyfilesvars, trace, mod, iog, refs, bldg_type_vint):
 
     # Plot parameter traces
-    az.plot_trace(trace)
+    pm.plot_trace(trace)
     fig1_path = path.join(
         "diagnostic_plots", bldg_type_vint,
         handyfilesvars.mod_dict[mod]["fig_names"][0])
     plt.gcf().savefig(fig1_path)
     # Plot parameter posterior distributions
-    az.plot_posterior(
+    pm.plots.plot_posterior(
         trace, var_names=[handyfilesvars.mod_dict[mod]["var_names"][0]],
         ref_val=refs)
     fig2_path = path.join(
@@ -1716,26 +1769,23 @@ def run_mod_assessment(handyfilesvars, trace, mod, iog, refs, bldg_type_vint):
     if mod != "choice":
         # Set testing data
         iot = ModelIOTest(iog, opts.mod_init, opts.mod_assess)
-        # Re-initialize model with subset of data used for testing (
-        # for model initialization case only)
-        if opts.mod_assess is True:
-            with pm.Model() as var_mod:
-                # Set parameter priors (betas, error)
-                params = pm.Normal(
-                    handyfilesvars.mod_dict[mod][
-                        "var_names"][0], 0, 10, shape=(iot.X.shape[1]))
-                sd = pm.HalfNormal(
-                    handyfilesvars.mod_dict[mod]["var_names"][1], 20)
-                # Likelihood of outcome estimator
-                est = pm.math.dot(iot.X, params)
-                # Likelihood of outcome
-                var = pm.Normal(
-                    handyfilesvars.mod_dict[mod]["var_names"][2],
-                    mu=est, sd=sd, observed=iot.Y)
-                output_diagnostics(
-                    handyfilesvars, trace, iot, mod, bldg_type_vint, var_mod)
-        else:
-            output_diagnostics(handyfilesvars, trace, iot, mod, bldg_type_vint)
+        # Re-initialize model with subset of data used for testing
+        # (if applicable)
+        with pm.Model() as var_mod:
+            # Set parameter priors (betas, error)
+            params = pm.Normal(
+                handyfilesvars.mod_dict[mod][
+                    "var_names"][0], 0, 10, shape=(iot.X.shape[1]))
+            sd = pm.HalfNormal(
+                handyfilesvars.mod_dict[mod]["var_names"][1], 20)
+            # Likelihood of outcome estimator
+            est = pm.math.dot(iot.X, params)
+            # Likelihood of outcome
+            var = pm.Normal(
+                handyfilesvars.mod_dict[mod]["var_names"][2],
+                mu=est, sd=sd, observed=iot.Y)
+            output_diagnostics(
+                handyfilesvars, trace, iot, mod, bldg_type_vint, var_mod)
 
 
 def output_diagnostics(
@@ -1747,24 +1797,29 @@ def output_diagnostics(
     pred_data = ppc_var[handyfilesvars.mod_dict[mod][
         "var_names"][2]]
 
-    # Histogram
-    fig1, ax1 = plt.subplots(figsize=(6, 6))
-    ax1.hist(
+    # Histogram / posterior fit to data
+    fig2, axs = plt.subplots(1, 2, figsize=(12, 6))
+    axs[0].hist(
         [n.mean() for n in pred_data], bins=20, alpha=0.5)
-    ax1.axvline(obs_data.mean())
-    ax1.set(title='Posterior Predictive of the Mean',
-            xlabel=("Mean (" + mod + ")"), ylabel='Frequency')
-    fig1_path = path.join(
+    axs[0].axvline(obs_data.mean())
+    axs[0].set(title='Posterior Predictive of the Mean',
+               xlabel=("Mean (" + mod + ")"), ylabel='Frequency')
+    az.plot_ppc(az.from_pymc3(
+        posterior_predictive=ppc_var, model=var_mod), color="C9", alpha=0.2,
+        ax=axs[1])
+    axs[1].set(title='Posterior Predictive Fit',
+               ylabel='Density')
+    fig2_path = path.join(
         "diagnostic_plots", bldg_type_vint,
         handyfilesvars.mod_dict[mod]["fig_names"][2])
-    fig1.savefig(fig1_path)
+    fig2.savefig(fig2_path)
 
     # Scatter/line
     prediction_data = pd.DataFrame(
         {'Mean Predicted Value': pred_data.mean(axis=0),
          'Observed Value': obs_data})
-    sns.set_style("darkgrid")
-    fig2 = sns.lmplot(
+    # sns.set_style("darkgrid")
+    fig3 = sns.lmplot(
         y='Observed Value', x='Mean Predicted Value', data=prediction_data,
         line_kws={'color': 'red', 'alpha': 0.5},
         scatter_kws={'color': 'blue', 'alpha': 0.05}, fit_reg=True)
@@ -1776,20 +1831,9 @@ def output_diagnostics(
     xmax = (3*xticks[-1] - xticks[-2])/2.
     plt.xlim(xmin, xmax)
     plt.xticks(xticks)
-    fig2_path = path.join(
-        "diagnostic_plots", bldg_type_vint,
-        handyfilesvars.mod_dict[mod]["fig_names"][3])
-    fig2.savefig(fig2_path)
-
-    # Plot posterior fit to data distribution
-    az.plot_ppc(az.from_pymc3(
-        posterior_predictive=ppc_var, model=var_mod), color="C9", alpha=0.2,
-        mean=False, legend=False)
     fig3_path = path.join(
         "diagnostic_plots", bldg_type_vint,
-        handyfilesvars.mod_dict[mod]["fig_names"][5])
-    fig3 = plt.gcf()
-    fig3.set_size_inches(6, 6)
+        handyfilesvars.mod_dict[mod]["fig_names"][3])
     fig3.savefig(fig3_path)
 
 
@@ -1861,6 +1905,7 @@ if __name__ == '__main__':
                         choices=["mediumofficenew", "mediumofficeold",
                                  "stdaloneretailnew", "stdaloneretailold",
                                  "largeofficenew", "largeofficeold",
+                                 "largeofficenew_elec", "largeofficeold_elec",
                                  "bigboxretail"],
                         help="Building type/vintage")
     parser.add_argument("--bldg_sf", required=False, type=int,
