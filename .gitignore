@@ -27,6 +27,11 @@ __pycache__/
 *.doc
 *.pages
 
+# Diagnostics folder #
+######################
+
+diagnostic_plots/
+
 # OS generated files #
 ######################
 
