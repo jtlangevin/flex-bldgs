@@ -248,11 +248,11 @@ class UsefulFilesVars(object):
             elif mod_est is True:
                 dmd_bl_dat = ("data", "test_update_bl.csv")
                 dmd_therm_dat, dmd_ntherm_dat, tmp_dat, pc_dmd_dat = (
-                    ("data", "test_update.csv") for n in range(5))
+                    ("data", "test_update.csv") for n in range(4))
             else:
                 dmd_bl_dat = ("data", "test_predict_bl.csv")
                 dmd_therm_dat, dmd_ntherm_dat, tmp_dat, pc_dmd_dat = (
-                    ("data", "test_predict.csv") for n in range(5))
+                    ("data", "test_predict.csv") for n in range(4))
             # Set stored model data files
             stored_dmd_bl = ("model_stored", "dmd_bbr_b.pkl")
             stored_dmd_therm = ("model_stored", "dmd_therm_bbr_n.pkl")
