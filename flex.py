@@ -263,9 +263,16 @@ class UsefulFilesVars(object):
             self.coefs = ("data", "coefs_bbr_n.csv")
 
         # Set DCE input/output file names
-        # DCE model is not broken out by building type/vintage
-        dce_dat = ("data", "dce_dat.csv")
-        stored_dce = ("model_stored", "dce.pkl")
+        # DCE model is broken out by building type, but not vintage
+        if bldg_type_vint in [
+            "mediumofficenew", "mediumofficeold",
+            "largeofficenew", "largeofficeold",
+                "largeofficenew_elec", "largeofficeold_elec"]:
+            dce_dat = ("data", "dce_dat_office.csv")
+            stored_dce = ("model_stored", "dce_office.pkl")
+        else:
+            dce_dat = ("data", "dce_dat_retail.csv")
+            stored_dce = ("model_stored", "dce_retail.pkl")
 
         # Set data input file column names and data types for model
         # initialization; these are different by model type (though the same
@@ -337,8 +344,8 @@ class UsefulFilesVars(object):
 
         # Set DCE model column names and data types
         dce_names_dtypes = [(
-            'economy', 'pc_tmp_low', 'pc_tmp_high', 'tmp', 'lgt', 'choice',
-            'plug'), (['<f8'] * 7)]
+            'economy', 'pc_tmp_low', 'pc_tmp_high', 'tmp', 'lgt', 'daylt',
+            'choice', 'plug'), (['<f8'] * 8)]
 
         # For each model type, store information on input/output data file
         # names, input/output data file formats, model variables, and
@@ -914,11 +921,16 @@ class ModelIO(object):
             tmp = data.choice['tmp']
             # Lighting decrease
             lgt = data.choice['lgt']
+            # Daylighting
+            dl = data.choice['daylt']
+            # Daylighting multiplied by lgt
+            lgt_dl = lgt * dl
             # Plug load decrease
             plug = data.choice['plug']
             # Set model input (X) variables; note, NO INTERCEPT
             self.X_all = np.stack([
-                economy, pc_tmp_l, pc_tmp_h, tmp, lgt, plug], axis=1)
+                economy, pc_tmp_l, pc_tmp_h, tmp, lgt,
+                lgt_dl, plug], axis=1)
             # Set model output (Y) variable for estimation cases
             self.Y_all = data.choice['choice']
 
@@ -994,8 +1006,24 @@ def main(base_dir):
     # Initialize building type, square footage, and demand threshold if
     # applicable
     bldg_type_vint = opts.bldg_type
-    sf = opts.bldg_sf
+    # Require building square footage data if recommendations are generated
+    if opts and opts.bldg_sf is not None:
+        sf = opts.bldg_sf
+    elif all([
+        x is not True for x in [
+            opts.mod_init, opts.mod_assess, opts.mod_est, opts.base_pred]]):
+        raise ValueError(
+            "Square footage is required for making predictions – specify "
+            "square footage via the `--bldg_sf [insert square footage]` cmd "
+            "line option and rerun")
+
     dmd_thres = opts.dmd_thres
+    # Pull in building daylit sf percentage if given; if not, assume a
+    # default daylit sf percentage of 30%
+    if opts and opts.daylt_pct is not None:
+        dl_pct = opts.daylight
+    else:
+        dl_pct = 30
 
     # Instantiate useful input file and variable data object
     handyfilesvars = UsefulFilesVars(
@@ -1236,7 +1264,8 @@ def main(base_dir):
         # Generate predictions for a next-day DR event with conditions and
         # candidate strategies described by an updated input file
         # (test_predict.csv, which is loaded into handyfilesvars)
-        predict_out = gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint)
+        predict_out = gen_recs(
+            handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct)
 
         # Write summary dict with predictions out to JSON file
         with open(path.join(
@@ -1330,7 +1359,7 @@ def gen_updates(
     return traces
 
 
-def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint):
+def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
 
     # Notify user of input data read
     print("Loading input data...")
@@ -1645,7 +1674,8 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint):
     x_choice = np.stack([
         ds_dict_fin["cost"], ds_dict_fin["temperature precool (low)"],
         ds_dict_fin["temperature precool (high)"], ds_dict_fin["temperature"],
-        ds_dict_fin["lighting"], ds_dict_fin["plug loads"]])
+        ds_dict_fin["lighting"], ds_dict_fin["lighting"] * dl_pct,
+        ds_dict_fin["plug loads"]])
     # Multiply model inputs by DCE betas to yield choice logits
     choice_logits = np.transpose(
         np.sum([np.transpose(x_choice[i]) * betas_choice[i] for
@@ -1914,6 +1944,8 @@ if __name__ == '__main__':
                         help="Add the baseline (do nothing) DR strategy")
     parser.add_argument("--dmd_thres", type=float,
                         help="Optional demand reduction threshold (kW)")
+    parser.add_argument("--daylt_pct", type=float,
+                        help="Optional daylighting fraction (%)")
     # Object to store all user-specified execution arguments
     opts = parser.parse_args()
     base_dir = getcwd()
