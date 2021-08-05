@@ -16,6 +16,7 @@ from matplotlib import pyplot as plt
 import matplotlib as mpl
 import json
 from pymc3.exceptions import SamplingError
+from matplotlib.ticker import FormatStrFormatter
 tt.config.compute_value = "ignore"
 
 
@@ -45,7 +46,7 @@ class UsefulFilesVars(object):
             # model re-estimation and prediction (the former uses different
             # CSVs for each building type, while the latter will only draw
             # from one CSV)
-            if mod_init is True or mod_assess is True:
+            if mod_init is True or (mod_assess is True and mod_est is False):
                 dmd_bl_dat = ("data", "MO_B.csv")
                 dmd_therm_dat = ("data", "MO_Thermal_Demand_new.csv")
                 dmd_ntherm_dat = ("data", "MO_Nonthermal_Demand_new.csv")
@@ -69,7 +70,7 @@ class UsefulFilesVars(object):
             self.coefs = ("data", "coefs_mo_n.csv")
         # Medium office, <2004 vintage
         elif bldg_type_vint == "mediumofficeold":
-            if mod_init is True or mod_assess is True:
+            if mod_init is True or (mod_assess is True and mod_est is False):
                 dmd_bl_dat = ("data", "MO_B.csv")
                 dmd_therm_dat = ("data", "MO_Thermal_Demand_old.csv")
                 dmd_ntherm_dat = ("data", "MO_Nonthermal_Demand_old.csv")
@@ -93,7 +94,7 @@ class UsefulFilesVars(object):
             self.coefs = ("data", "coefs_mo_o.csv")
         # Retail, >=2004 vintage
         elif bldg_type_vint == "stdaloneretailnew":
-            if mod_init is True or mod_assess is True:
+            if mod_init is True or (mod_assess is True and mod_est is False):
                 dmd_bl_dat = ("data", "SR_B.csv")
                 dmd_therm_dat = ("data", "SR_Thermal_Demand_new.csv")
                 dmd_ntherm_dat = ("data", "SR_Nonthermal_Demand_new.csv")
@@ -117,7 +118,7 @@ class UsefulFilesVars(object):
             self.coefs = ("data", "coefs_saret_n.csv")
         # Retail, <2004 vintage
         elif bldg_type_vint == "stdaloneretailold":
-            if mod_init is True or mod_assess is True:
+            if mod_init is True or (mod_assess is True and mod_est is False):
                 dmd_bl_dat = ("data", "SR_B.csv")
                 dmd_therm_dat = ("data", "SR_Thermal_Demand_old.csv")
                 dmd_ntherm_dat = ("data", "SR_Nonthermal_Demand_old.csv")
@@ -141,7 +142,7 @@ class UsefulFilesVars(object):
             self.coefs = ("data", "coefs_saret_o.csv")
         # Large office, >=2004 vintage
         elif bldg_type_vint == "largeofficenew":
-            if mod_init is True or mod_assess is True:
+            if mod_init is True or (mod_assess is True and mod_est is False):
                 dmd_bl_dat = ("data", "MO_B.csv")  # ***** UPDATE *****
                 dmd_therm_dat = ("data", "LO_Thermal_Demand_new.csv")
                 dmd_ntherm_dat = ("data", "LO_Nonthermal_Demand_new.csv")
@@ -165,7 +166,7 @@ class UsefulFilesVars(object):
             self.coefs = ("data", "coefs_lo_n.csv")
         # Large office, <2004 vintage
         elif bldg_type_vint == "largeofficeold":
-            if mod_init is True or mod_assess is True:
+            if mod_init is True or (mod_assess is True and mod_est is False):
                 dmd_bl_dat = ("data", "MO_B.csv")  # ***** UPDATE *****
                 dmd_therm_dat = ("data", "LO_Thermal_Demand_old.csv")
                 dmd_ntherm_dat = ("data", "LO_Nonthermal_Demand_old.csv")
@@ -189,7 +190,7 @@ class UsefulFilesVars(object):
             self.coefs = ("data", "coefs_lo_o.csv")
         # Large office (all-electric), >=2004 vintage
         elif bldg_type_vint == "largeofficenew_elec":
-            if mod_init is True or mod_assess is True:
+            if mod_init is True or (mod_assess is True and mod_est is False):
                 dmd_bl_dat = ("data", "MO_B.csv")  # ***** UPDATE *****
                 dmd_therm_dat = ("data", "LO_allElec_Thermal_Demand_new.csv")
                 dmd_ntherm_dat = (
@@ -214,7 +215,7 @@ class UsefulFilesVars(object):
             self.coefs = ("data", "coefs_lo_elec_n.csv")
         # Large office (all-electric), <2004 vintage
         elif bldg_type_vint == "largeofficeold_elec":
-            if mod_init is True or mod_assess is True:
+            if mod_init is True or (mod_assess is True and mod_est is False):
                 dmd_bl_dat = ("data", "MO_B.csv")  # ***** UPDATE *****
                 dmd_therm_dat = ("data", "LO_allElec_Thermal_Demand_old.csv")
                 dmd_ntherm_dat = (
@@ -239,7 +240,7 @@ class UsefulFilesVars(object):
             self.coefs = ("data", "coefs_lo_elec_o.csv")
         # Big box retail, 2004 vintage
         elif bldg_type_vint == "bigboxretail":
-            if mod_init is True or mod_assess is True:
+            if mod_init is True or (mod_assess is True and mod_est is False):
                 dmd_bl_dat = ("data", "SR_B.csv")  # ***** UPDATE *****
                 dmd_therm_dat = ("data", "BBR_Thermal_Demand_new.csv")
                 dmd_ntherm_dat = ("data", "BBR_Nonthermal_Demand_new.csv")
@@ -277,7 +278,7 @@ class UsefulFilesVars(object):
         # Set data input file column names and data types for model
         # initialization; these are different by model type (though the same
         # for the temperature and demand models, which draw from the same CSV)
-        if mod_init is True or mod_assess is True:
+        if mod_init is True or (mod_assess is True and mod_est is False):
             dmd_bl_names_dtypes = [
                 ('id', 'vintage', 'day_typ', 'hour_number', 'climate',
                  'dmd_sf', 't_out', 'rh_out', 'occ_frac',
@@ -316,7 +317,9 @@ class UsefulFilesVars(object):
                  'pc_length', 'hrs_since_pc_st', 'hrs_since_pc_end'),
                 (['<i4'] + ['<U25'] + ['<i4'] + ['<f8'] * 16)] for
                 n in range(2))
-            self.coef_names_dtypes = None
+            self.coef_names_dtypes = [
+                ('demand_bl', 'demand_therm', 'demand_ntherm', 'temperature',
+                 'demand_precool'), (['<f8'] * 5)]
         # Set data input file column names and data types for model
         # prediction; these will be the same across models
         else:
@@ -340,7 +343,9 @@ class UsefulFilesVars(object):
                     'mels_delt_pct_lag', 'pc_tmp_inc', 'pc_length',
                     'lt_pwr_delt'),
                     (['<U50'] + ['<f8'] * 22)] for n in range(2))
-            self.coef_names_dtypes = None
+            self.coef_names_dtypes = [
+                ('demand_bl', 'demand_therm', 'demand_ntherm', 'temperature',
+                 'demand_precool'), (['<f8'] * 5)]
 
         # Set DCE model column names and data types
         dce_names_dtypes = [(
@@ -428,23 +433,20 @@ class ModelDataLoad(object):
         pc_dmd (numpy ndarray): Input data for pre-cooling demand model init.
         coefs (tuple): Path to CSV file with regression coefficients for
             use in model re-estimation.
-        oaf_delt (numpy ndarray): Outdoor air adjustment fractions by DR
-            strategy for use in model prediction.
+        hr (numpy ndarray): Hours covered by model prediction input data
+        tmp_delt (numpy ndarray): Data used to determine whether
+            a measure changes the thermostat set point in a current hour.
+        tmp_delt_prev (numpy ndarray): Data used to determine whether
+            a measure changed the thermostat set point in a previous hour.
+        lgt_delt (numpy ndarray): Data used to determine whether
+            a measure changes the lighting setting in a current hour.
         plug_delt (numpy ndarray): Plug load adjustment fractions by DR
             strategy for use in model prediction.
-        lt_delt (numpy ndarray): Lighting adjustment fractions by DR
+        oaf_delt (numpy ndarray): Outdoor air adjustment fractions by DR
             strategy for use in model prediction.
         price_delt (numpy ndarray): $/kWh incentive by DR strategy for use
             in model prediction.
-        hr (numpy ndarray): Hours covered by model prediction input data
-        tmp_active (numpy ndarray): Data used to determine whether
-            a measure changes the thermostat set point in a current hour.
-        tmp_active_prev (numpy ndarray): Data used to determine whether
-            a measure changed the thermostat set point in a previous hour.
-        lgt_active (numpy ndarray): Data used to determine whether
-            a measure changes the lighting setting in a current hour.
-        lgt_active_prev (numpy ndarray): Data used to determine whether
-            a measure changed the lighting setting in a previous hour.
+
     """
 
     def __init__(self, handyfilesvars, mod_init, mod_assess,
@@ -452,11 +454,11 @@ class ModelDataLoad(object):
         """Initialize class attributes."""
 
         # Initialize OAF delta, plug load delta and price delta as None
-        self.coefs, self.oaf_delt, self.plug_delt, self.lt_delt, \
+        self.coefs, self.oaf_delt, self.plug_delt, self.lgt_delt, \
             self.price_delt = (None for n in range(5))
         # Data read-in for model initialization is specific to each type
         # of model (though demand/temperature share the same input data);
-        if mod_init is True or mod_assess is True:
+        if mod_init is True or (mod_assess is True and mod_est is False):
             # Read in data for initializing baseline demand model
             self.dmd_bl = np.genfromtxt(
                 path.join(base_dir,
@@ -551,17 +553,21 @@ class ModelDataLoad(object):
                     "demand_therm"]["io_data_names"][0],
                 dtype=handyfilesvars.mod_dict[
                     "demand_therm"]["io_data_names"][1])
+
+            # Pull out key variables as class attributes
+            self.tmp_delt = common_data['tsp_delt']
+            self.tmp_delt_prev = common_data['tsp_delt_lag']
+            self.lgt_delt = common_data['lt_pwr_delt_pct']
+            self.plug_delt = common_data['mels_delt_pct']
+            self.pc_mag = common_data['pc_tmp_inc']
+
             # Restrict prediction input file to appropriate prediction or
             # model estimation update data (if applicable)
             if mod_est is False:
                 self.hr_bl = dmd_bl['Hr']
                 self.hr = common_data['Hr']
                 self.strategy = common_data['Name']
-                self.tmp_active = common_data['tsp_delt']
-                self.tmp_active_prev = common_data['tsp_delt_lag']
-                self.lgt_active = common_data['lt_pwr_delt_pct']
-                self.lgt_active_prev = common_data['lt_pwr_delt_pct_lag']
-                self.pc_mag = common_data['pc_tmp_inc']
+                self.price_delt = common_data['delt_price_kwh']
                 # Set inputs to baseline demand model
                 # from prediction/estimation input files
                 self.dmd_bl = dmd_bl
@@ -583,36 +589,35 @@ class ModelDataLoad(object):
                 #         np.in1d(common_data['day_num'], self.event_days)]
                 # Set inputs to demand, temperature, co2, lighting, and
                 # pre-cooling models from prediction/estimation input files
+                self.hr_bl = None
+                self.hr = None
+                self.strategy = None
                 # Note: DR period data are flagged by rows where the set point
                 # temperature change is greater than or equal to zero
                 self.dmd_bl = dmd_bl
-                self.dmd_therm, self.dmd_ntherm, self.tmp = (
+                # DR thermal data; set point change is positive or lagged
+                # set point change is negative (first hour of rebound)
+                self.dmd_therm, self.tmp = (
                     common_data[
-                        np.where(common_data['tsp_delt'] >= 0)] for
-                    n in range(3))
-                # Note: pre-cooling data are flagged by rows where the set
-                # point temperature change is less than zero
+                        np.where((common_data['tsp_delt'] > 0) |
+                                 (common_data['tsp_delt_lag'] < 0))] for
+                    n in range(2))
+                # DR non-thermal data; set point change and lagged set point
+                # change are both zero
+                self.dmd_ntherm = common_data[
+                    np.where((common_data['tsp_delt'] == 0) &
+                             (common_data['tsp_delt_lag'] == 0))]
+                # Precooling data; set point change is negative
                 self.pc_dmd = common_data[
                     np.where(common_data['tsp_delt'] < 0)]
-                self.tmp_active = common_data['tsp_delt']
-                self.tmp_active_prev = None
-                self.lgt_active = None
-                self.lgt_active_prev = None
-                self.pc_mag = None
-                self.hr = None
-                self.strategy = None
+                # Read in reference frequentist coefs. to compare Bayesian
+                # estimates against
+                self.coefs = np.genfromtxt(
+                    path.join(base_dir, *handyfilesvars.coefs),
+                    skip_header=True, delimiter=',',
+                    names=handyfilesvars.coef_names_dtypes[0],
+                    dtype=handyfilesvars.coef_names_dtypes[1])
 
-            # Set outdoor air fraction delta, plug load delta and price
-            # delta to values from prediction input file (these are not
-            # predicted via a Bayesian model)
-            if mod_est is False:
-                self.oaf_delt = common_data['ven_delt_pct']
-                self.plug_delt = common_data['mels_delt_pct']
-                self.lt_delt = common_data['lt_pwr_delt_pct']
-                self.price_delt = common_data['delt_price_kwh']
-            else:
-                self.oaf_delt, self.plug_delt, self.price_delt = (
-                    None for n in range(3))
             # When not initializing or assessing a model, choice model
             # attribute is irrelevant
             self.choice = None
@@ -1122,8 +1127,8 @@ def main(base_dir):
                         dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
                 else:
                     refs = None
-                run_mod_assessment(
-                    handyfilesvars, trace, mod, iog, refs, bldg_type_vint)
+                run_mod_assessment(handyfilesvars, trace, mod, iog,
+                                   refs, bldg_type_vint, opts, update_n=None)
                 print("Complete.")
 
     elif opts.mod_est is True:
@@ -1143,17 +1148,24 @@ def main(base_dir):
             #           "temperature": [], "demand_precool": []}
             traces = {"demand_therm": [], "demand_ntherm": [],
                       "temperature": [], "demand_precool": []}
-        # Determine model types to update (demand and temperature if no
+        # Determine model types to update (thermal demand and temperature if no
         # precooling is indicated by the input data (TSP<0), otherwise add
-        # precooling demand and temperature models)
-        if any(dat.tmp_active < 0):
-            mod_update_list = [
-                "demand_therm", "demand_ntherm", "temperature",
-                "demand_precool"]
-        else:
-            mod_update_list = [
-                "demand_therm", "demand_ntherm", "temperature"]
+        # precooling demand and temperature models if there are set point
+        # adjustments, otherwise only update the non-thermal demand model)
 
+        # Initialize list of models to update
+        mod_update_list = []
+        # If data exist to update thermal demand and temp. models, add to list
+        if len(dat.dmd_therm) > 0:
+            mod_update_list.extend(["demand_therm", "temperature"])
+        # Ditto non-thermal demand model
+        if len(dat.dmd_ntherm) > 0:
+            mod_update_list.append("demand_ntherm")
+        # Ditto precooling model
+        if len(dat.pc_dmd) > 0:
+            mod_update_list.append("demand_precool")
+
+        print(mod_update_list, dat.dmd_therm, dat.dmd_ntherm, dat.pc_dmd)
         # Loop through model updates
         for mod in mod_update_list:
             try:
@@ -1166,11 +1178,12 @@ def main(base_dir):
                 pass
             # After the update, generate some diagnostic plots showing
             # how parameter estimates changed for thermal-related models
-            if mod != "demand_ntherm":
-                plot_updating(
-                    handyfilesvars,
-                    handyfilesvars.mod_dict[mod]["var_names"][0],
-                    traces[mod], mod, bldg_type_vint)
+
+            # Pull in frequentist estimates as initial reference
+            refs = list(dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
+            plot_updating(
+                handyfilesvars, handyfilesvars.mod_dict[mod]["var_names"][0],
+                traces[mod], mod, bldg_type_vint, refs)
 
     elif opts.mod_assess is True:
 
@@ -1202,8 +1215,8 @@ def main(base_dir):
                     dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
             else:
                 refs = None
-            run_mod_assessment(
-                handyfilesvars, trace, mod, iog, refs, bldg_type_vint)
+            run_mod_assessment(handyfilesvars, trace, mod, iog, refs,
+                               bldg_type_vint, opts, update_n=None)
             print("Complete.")
 
     elif opts.base_pred is True:
@@ -1350,10 +1363,13 @@ def gen_updates(
               flush=True)
         # Set reference coefficient values, estimated using a
         # frequentist regression approach
-        refs = list(
-            dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
-        run_mod_assessment(
-            handyfilesvars, trace, mod, iog, refs, bldg_type_vint)
+        if mod != "choice":
+            refs = list(
+                dat.coefs[mod][np.where(np.isfinite(dat.coefs[mod]))])
+        else:
+            refs = None
+        run_mod_assessment(handyfilesvars, trace, mod, iog, refs,
+                           bldg_type_vint, opts, str(len(traces) - 1))
         print("Complete.")
 
     return traces
@@ -1449,7 +1465,7 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
         for pcn in names_pc:
             inds_pca = np.where((dat.hr == hr) & (dat.strategy == pcn))
             # Inactive pre-cooling measures will have TSP of zero
-            if dat.tmp_active[inds_pca] == 0:
+            if dat.tmp_delt[inds_pca] == 0:
                 pc_active_flag.append(0)
             else:
                 pc_active_flag.append(1)
@@ -1497,17 +1513,17 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
         inds = np.where(dat.hr == hr)
         # Determine which measures affect thermostat set points in the current
         # hour, and lighting settings in the current hour
-        tmp_active_flag = []
+        tmp_delt_flag = []
         dmd_dat = np.tile(dat.plug_delt[inds], (n_samples, 1))
         for mn in names_o:
             inds_tmp = np.where((dat.hr == hr) & (dat.strategy == mn))
             # Measures that do not affect tsp will have the change in
             # set point and lag in set point change vars set to zero
-            if (dat.tmp_active[inds_tmp] == 0) & \
-               (dat.tmp_active_prev[inds_tmp] == 0):
-                tmp_active_flag.append(0)
+            if (dat.tmp_delt[inds_tmp] == 0) & \
+               (dat.tmp_delt_prev[inds_tmp] == 0):
+                tmp_delt_flag.append(0)
             else:
-                tmp_active_flag.append(1)
+                tmp_delt_flag.append(1)
 
         for mod in ["demand_ntherm", "demand_therm", "temperature"]:
             # Reload trace
@@ -1521,7 +1537,7 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
         # thermostat set points to zero
         for n in range(n_samples):
             for tm in range(len(names_o)):
-                if tmp_active_flag[tm] == 0:
+                if tmp_delt_flag[tm] == 0:
                     pp_dict["temperature"][
                         'Temperature Change (ºF)'][n][tm] = 0
                     dmd_dat[n][tm] = pp_dict["demand_ntherm"][
@@ -1539,7 +1555,7 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
         # Extend plug load delta values for each choice across all samples
         plug_delt = np.tile(dat.plug_delt[inds], (n_samples, 1))
         # Extend lighting delta values for each choice across all samples
-        lt_delt = np.tile(dat.lt_delt[inds], (n_samples, 1))
+        lt_delt = np.tile(dat.lgt_delt[inds], (n_samples, 1))
         # Store hourly predictions of changes in demand, cost, and services
         # Predicted change in demand
         ds_dict_prep["demand"].append(dmd_dat)
@@ -1778,26 +1794,37 @@ def run_mod_prediction_bl(handyfilesvars, trace, mod, dat, n_samples):
     return ppc
 
 
-def run_mod_assessment(handyfilesvars, trace, mod, iog, refs, bldg_type_vint):
+def run_mod_assessment(
+        handyfilesvars, trace, mod, iog, refs, bldg_type_vint, opts, update_n):
+
+    # Determine file name based on whether model assessment is being run
+    # for an updating routine or not
+    if update_n:
+        fig1_file_name = ("_update_" + update_n +
+                          handyfilesvars.mod_dict[mod]["fig_names"][0])
+        fig2_file_name = ("_update_" + update_n +
+                          handyfilesvars.mod_dict[mod]["fig_names"][1])
+    else:
+        fig1_file_name = handyfilesvars.mod_dict[mod]["fig_names"][0]
+        fig2_file_name = handyfilesvars.mod_dict[mod]["fig_names"][1]
 
     # Plot parameter traces
     pm.plot_trace(trace)
     fig1_path = path.join(
-        "diagnostic_plots", bldg_type_vint,
-        handyfilesvars.mod_dict[mod]["fig_names"][0])
+        "diagnostic_plots", bldg_type_vint, fig1_file_name)
     plt.gcf().savefig(fig1_path)
     # Plot parameter posterior distributions
     pm.plots.plot_posterior(
         trace, var_names=[handyfilesvars.mod_dict[mod]["var_names"][0]],
-        ref_val=refs)
+        textsize=24, ref_val=refs)
     fig2_path = path.join(
-        "diagnostic_plots", bldg_type_vint,
-        handyfilesvars.mod_dict[mod]["fig_names"][1])
+        "diagnostic_plots", bldg_type_vint, fig2_file_name)
     plt.gcf().savefig(fig2_path)
 
-    # Only proceed further with diagnostics for models other than the choice
+    # Only proceed further with diagnostics if model assessment is not being
+    # run for an updating routine, and only for models other than the choice
     # model (only parameter traces/distributions are printed for choice model)
-    if mod != "choice":
+    if opts.mod_est is not True and mod != "choice":
         # Set testing data
         iot = ModelIOTest(iog, opts.mod_init, opts.mod_assess)
         # Re-initialize model with subset of data used for testing
@@ -1829,17 +1856,29 @@ def output_diagnostics(
         "var_names"][2]]
 
     # Histogram / posterior fit to data
-    fig2, axs = plt.subplots(1, 2, figsize=(12, 6))
+    fig2, axs = plt.subplots(1, 2, figsize=(16, 6))
     axs[0].hist(
-        [n.mean() for n in pred_data], bins=20, alpha=0.5)
-    axs[0].axvline(obs_data.mean())
-    axs[0].set(title='Posterior Predictive of the Mean',
-               xlabel=("Mean (" + mod + ")"), ylabel='Frequency')
+        [n.mean() for n in pred_data], bins=20, alpha=0.5,
+        label="Posterior predicted")
+    axs[0].axvline(obs_data.mean(), linewidth=3, label="Observed mean")
+    axs[0].legend()
+    axs[0].set_title('Posterior Predictive of the Mean', fontsize=16)
+    axs[0].set_xlabel("Mean " + handyfilesvars.mod_dict[mod][
+        "var_names"][2], fontsize=16)
+    axs[0].set_ylabel('Frequency', fontsize=16)
+    axs[0].tick_params(axis='x', labelsize=14)
+    axs[0].xaxis.set_major_formatter(FormatStrFormatter('%.3f'))
+    axs[0].tick_params(axis='y', labelsize=14)
+    axs[1].set_title('Posterior Predictive Fit', fontsize=16)
+    axs[1].set_ylabel('Density', fontsize=16)
     az.plot_ppc(az.from_pymc3(
         posterior_predictive=ppc_var, model=var_mod), color="C9", alpha=0.2,
-        ax=axs[1])
-    axs[1].set(title='Posterior Predictive Fit',
-               ylabel='Density')
+        textsize=16, mean=False, ax=axs[1], legend=False)
+    axs[1].tick_params(axis='x', labelsize=14)
+    axs[1].legend(['Observed', 'Posterior predicted'])
+    mx = max([max([max(x) for x in pred_data]), max(obs_data)])
+    mn = min([min([min(x) for x in pred_data]), min(obs_data)])
+    axs[1].set_xlim([mn - mx * 0.1, mx + mx * 0.1])
     fig2_path = path.join(
         "diagnostic_plots", bldg_type_vint,
         handyfilesvars.mod_dict[mod]["fig_names"][2])
@@ -1880,34 +1919,49 @@ def from_posterior(param, samples):
     return pm.Interpolated(param, x, y)
 
 
-def plot_updating(handyfilesvars, param, traces, mod, bldg_type_vint):
+def plot_updating(handyfilesvars, param, traces, mod, bldg_type_vint, refs):
 
     # Set color map for plots
-    cmap = mpl.cm.autumn
+    cmap = mpl.cm.cool
+    # Set variable name to plot
+    if mod == "demand_ntherm":
+        var_name = "Lighting Change Parameter Distribution"
+        var_ind = 1
+    else:
+        var_name = "Set Point Change Parameter Distribution"
+        var_ind = 1
     # Initialize subplots and figure object
-    fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(3.5, 6))
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 6))
     # Develop and plot kernel density estimators of parameter traces,
     # and plot these estimators across each successive parameter update
     for update_i, trace in enumerate(traces):
         if trace is not None:
-            # Outdoor temperature
-            samples_oat = np.array([x[1] for x in trace[param]])
-            smin_oat, smax_oat = np.min(samples_oat), np.max(samples_oat)
-            x_oat = np.linspace(smin_oat, smax_oat, 100)
-            y_oat = stats.gaussian_kde(samples_oat)(x_oat)
-            axs[0].plot(x_oat, y_oat, color=cmap(1 - update_i / len(traces)))
-            # Set point adjustment level
-            samples_sp = np.array([x[4] for x in trace[param]])
+            # Focus on set point parameter (4th in the demand model)
+            samples_sp = np.array([x[var_ind] for x in trace[param]])
             smin_sp, smax_sp = np.min(samples_sp), np.max(samples_sp)
             x_sp = np.linspace(smin_sp, smax_sp, 100)
             y_sp = stats.gaussian_kde(samples_sp)(x_sp)
-            axs[1].plot(x_sp, y_sp, color=cmap(1 - update_i / len(traces)))
-    # Set OAT plot title and axis labels
-    axs[0].set_title("Outdoor Temperature")
-    axs[0].set_ylabel('Frequency')
-    # Set set point temperature plot title and axis labels
-    axs[1].set_title("Set Point Offset")
-    axs[1].set_ylabel('Frequency')
+            if update_i == 0:
+                ax.axvline(x=refs[var_ind], label='Frequentist estimate',
+                           color="slategray", linewidth=3)
+                ax.plot(
+                    x_sp, y_sp, color=cmap(update_i / (len(traces)-1)),
+                    label="Initial Estimate")
+            elif update_i == (len(traces) - 1):
+                ax.plot(
+                    x_sp, y_sp, color=cmap(update_i / (len(traces)-1)),
+                    label="After " + str(update_i) + " Updates")
+            else:
+                ax.plot(
+                    x_sp, y_sp, color=cmap(update_i / (len(traces)-1)))
+
+    # Set plot title, axis labels, and legend
+    ax.set_title(var_name, fontsize=16)
+    ax.set_ylabel('Frequency', fontsize=16)
+    ax.set_xlabel('Parameter Value', fontsize=16)
+    ax.tick_params(axis='x', labelsize=14)
+    ax.tick_params(axis='y', labelsize=14)
+    ax.legend()
     # Set figure layout parameter
     fig.tight_layout(pad=1.0)
     # Determine figure path and save figure
