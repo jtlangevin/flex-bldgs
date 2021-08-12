@@ -595,18 +595,20 @@ class ModelDataLoad(object):
                 # Note: DR period data are flagged by rows where the set point
                 # temperature change is greater than or equal to zero
                 self.dmd_bl = dmd_bl
-                # DR thermal data; set point change is positive or lagged
+                # DR thermal demand data; set point change is positive or lag
                 # set point change is negative (first hour of rebound)
-                self.dmd_therm, self.tmp = (
-                    common_data[
-                        np.where((common_data['tsp_delt'] > 0) |
-                                 (common_data['tsp_delt_lag'] < 0))] for
-                    n in range(2))
+                self.dmd_therm = common_data[
+                    np.where((common_data['tsp_delt'] > 0) |
+                             (common_data['tsp_delt_lag'] < 0))]
+                # DR temp. data; set point change is positive
+                self.tmp = common_data[np.where((common_data['tsp_delt'] > 0))]
                 # DR non-thermal data; set point change and lagged set point
                 # change are both zero
                 self.dmd_ntherm = common_data[
                     np.where((common_data['tsp_delt'] == 0) &
-                             (common_data['tsp_delt_lag'] == 0))]
+                             (common_data['tsp_delt_lag'] == 0) & (
+                             (common_data['lt_pwr_delt_pct'] != 0) |
+                             (common_data['mels_delt_pct'] != 0)))]
                 # Precooling data; set point change is negative
                 self.pc_dmd = common_data[
                     np.where(common_data['tsp_delt'] < 0)]
@@ -1165,13 +1167,11 @@ def main(base_dir):
         if len(dat.pc_dmd) > 0:
             mod_update_list.append("demand_precool")
 
-        print(mod_update_list, dat.dmd_therm, dat.dmd_ntherm, dat.pc_dmd)
         # Loop through model updates
         for mod in mod_update_list:
             try:
-                traces[mod] = gen_updates(
-                    handyfilesvars, opts, mod,
-                    traces[mod], dat, bldg_type_vint)
+                traces[mod] = gen_updates(handyfilesvars, opts, mod,
+                                          traces[mod], dat, bldg_type_vint)
             # Handle case where update cannot be estimated (e.g., bad initial
             # energy, returns Value Error)
             except (ValueError, SamplingError):
