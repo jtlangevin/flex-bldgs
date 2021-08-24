@@ -107,6 +107,9 @@ plt_chc <- ggplot(chc_dat.m, aes(x=reorder(group, value, FUN=mean), y=value)) + 
 	ylab("Selection Probability (frac)") + xlab("Candidate Strategy")
 plt_chc_fin <- plt_chc + coord_flip() + geom_hline(yintercept = threshold, color="red", size=1)
 
+# plt_chc <- ggplot(chc_dat.m, aes(x=reorder(group, value, FUN=median), y=value)) + geom_boxplot() +
+#	ylab("Selection Probability (frac)") + xlab("Candidate Strategy")
+# plt_chc_fin <- plt_chc + coord_flip()
 # Organize the plots on one page
 grid.arrange(plt_dmd_fin , plt_dmd_pc_fin, plt_cost_fin, plt_cost_pc_fin, plt_tmp_fin, plt_lgt_fin, plt_chc_fin, nrow = 2)
 # grid.arrange(plt_cost_fin, plt_tmp_fin, plt_lgt_fin, plt_chc_fin, nrow = 1)

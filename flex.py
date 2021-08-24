@@ -264,16 +264,8 @@ class UsefulFilesVars(object):
             self.coefs = ("data", "coefs_bbr_n.csv")
 
         # Set DCE input/output file names
-        # DCE model is broken out by building type, but not vintage
-        if bldg_type_vint in [
-            "mediumofficenew", "mediumofficeold",
-            "largeofficenew", "largeofficeold",
-                "largeofficenew_elec", "largeofficeold_elec"]:
-            dce_dat = ("data", "dce_dat_office.csv")
-            stored_dce = ("model_stored", "dce_office.pkl")
-        else:
-            dce_dat = ("data", "dce_dat_retail.csv")
-            stored_dce = ("model_stored", "dce_retail.pkl")
+        dce_dat = ("data", "dce_dat.csv")
+        stored_dce = ("model_stored", "dce.pkl")
 
         # Set data input file column names and data types for model
         # initialization; these are different by model type (though the same
@@ -349,8 +341,8 @@ class UsefulFilesVars(object):
 
         # Set DCE model column names and data types
         dce_names_dtypes = [(
-            'economy', 'pc_tmp_low', 'pc_tmp_high', 'tmp', 'lgt', 'daylt',
-            'choice', 'plug'), (['<f8'] * 8)]
+            'economy', 'pc_tmp', 'tmp', 'lgt', 'daylt', 'choice', 'plug'),
+            (['<f8'] * 7)]
 
         # For each model type, store information on input/output data file
         # names, input/output data file formats, model variables, and
@@ -599,9 +591,12 @@ class ModelDataLoad(object):
                 # set point change is negative (first hour of rebound)
                 self.dmd_therm = common_data[
                     np.where((common_data['tsp_delt'] > 0) |
-                             (common_data['tsp_delt_lag'] < 0))]
+                             (common_data['tsp_delt_lag'] < 0) &
+                             (common_data['t_out'] > 70))]
                 # DR temp. data; set point change is positive
-                self.tmp = common_data[np.where((common_data['tsp_delt'] > 0))]
+                self.tmp = common_data[np.where(
+                    (common_data['tsp_delt'] > 0) &
+                    (common_data['t_out'] > 70))]
                 # DR non-thermal data; set point change and lagged set point
                 # change are both zero
                 self.dmd_ntherm = common_data[
@@ -611,7 +606,10 @@ class ModelDataLoad(object):
                              (common_data['mels_delt_pct'] != 0)))]
                 # Precooling data; set point change is negative
                 self.pc_dmd = common_data[
-                    np.where(common_data['tsp_delt'] < 0)]
+                    np.where(
+                        (common_data['tsp_delt'] < 0) &
+                        (common_data['t_out'] > 70) &
+                        (common_data['occ_frac'] > 0))]
                 # Read in reference frequentist coefs. to compare Bayesian
                 # estimates against
                 self.coefs = np.genfromtxt(
@@ -920,10 +918,8 @@ class ModelIO(object):
                 x for x in range(len(data.choice))] for n in range(2))
             # Economic benefit
             economy = data.choice['economy']
-            # Pre-cooling temp. decrease (<=2 deg F event temp. increase)
-            pc_tmp_l = data.choice['pc_tmp_low']
-            # Pre-cooling temp. decrease (>2  deg F event temp. increase)
-            pc_tmp_h = data.choice['pc_tmp_high']
+            # Pre-cooling temp. decrease
+            pc_tmp = data.choice['pc_tmp']
             # Temp. increase
             tmp = data.choice['tmp']
             # Lighting decrease
@@ -936,8 +932,7 @@ class ModelIO(object):
             plug = data.choice['plug']
             # Set model input (X) variables; note, NO INTERCEPT
             self.X_all = np.stack([
-                economy, pc_tmp_l, pc_tmp_h, tmp, lgt,
-                lgt_dl, plug], axis=1)
+                economy, pc_tmp, tmp, lgt, lgt_dl, plug], axis=1)
             # Set model output (Y) variable for estimation cases
             self.Y_all = data.choice['choice']
 
@@ -1028,7 +1023,7 @@ def main(base_dir):
     # Pull in building daylit sf percentage if given; if not, assume a
     # default daylit sf percentage of 30%
     if opts and opts.daylt_pct is not None:
-        dl_pct = opts.daylight
+        dl_pct = opts.daylt_pct
     else:
         dl_pct = 30
 
@@ -1094,7 +1089,9 @@ def main(base_dir):
                     params_1 = pm.Normal(
                         handyfilesvars.mod_dict[mod]["var_names"][0], 0, 10,
                         shape=(iot.X.shape[1] - 1))
-                    params_2 = pm.Normal('plg', -1.25, 0.36, shape=1)
+                    # Plug load prior set to roughly that of lighting current
+                    # summer coefficient given zero daylighting
+                    params_2 = pm.Normal('plg', -2.5, 0.5, shape=1)
                     params = tt.tensor.concatenate([
                         params_1, params_2], axis=0)
                     # Likelihood of outcome estimator; apply sigmoid function
@@ -1417,8 +1414,8 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
     # hour in the analysis (including precooling hours as applicable)
     ds_dict_prep = {
         "demand": [], "demand precool": [], "cost": [], "cost precool": [],
-        "temperature": [], "temperature precool (low)": [],
-        "temperature precool (high)": [], "lighting": [], "plug loads": []}
+        "temperature": [], "temperature precool": [],
+        "lighting": [], "plug loads": []}
     # Initialize a numpy array that stores the count of the number of
     # times each candidate DR strategy is selected across simulated hours
     counts = np.zeros(n_choices)
@@ -1501,8 +1498,7 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
             pp_dict["demand_precool"]['Demand Change (W/sf)'])
         # Predicted change in temperature (precooling hour); NOTE invert the
         # sign of the predictions to match what is expected by the DCE equation
-        ds_dict_prep["temperature precool (high)"].append(pc_mags)
-        ds_dict_prep["temperature precool (low)"].append(pc_mags)
+        ds_dict_prep["temperature precool"].append(pc_mags)
         # Predicted change in economic benefit (precooling hour)
         ds_dict_prep["cost precool"].append(cost_delt)
 
@@ -1577,8 +1573,7 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
     ds_dict_fin = {
         key: np.zeros((n_samples, n_choices)) for key in [
             "demand", "demand precool", "cost", "cost precool", "temperature",
-            "temperature precool (high)", "temperature precool (low)",
-            "lighting", "plug loads"]
+            "temperature precool", "lighting", "plug loads"]
     }
     # Loop through all variable keys in the final predictions dict and update
     # the final predictions data
@@ -1632,10 +1627,8 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
         # handle cases where there are no pre-cooling measures or service
         # changes to update
         elif key != "choice probabilities" and (key not in [
-            "temperature precool (high)", "temperature precool (low)",
-            "demand precool", "cost precool"] or (
-                key in ["temperature precool (high)",
-                        "temperature precool (low)", "demand precool"] and len(
+            "temperature precool", "demand precool", "cost precool"] or (
+                key in ["temperature precool", "demand precool"] and len(
                     ds_dict_prep[key]) != 0)):
             # Initialize list for storing the median predicted change in
             # variable for the given hour represented by the the prep dict
@@ -1663,8 +1656,7 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
                     # variable itself; precooling  temperature and demand
                     # variables will reflect only the subset of the total set
                     # of measures that feature pre-cooling
-                    if key not in ["temperature precool (high)",
-                                   "temperature precool (low)",
+                    if key not in ["temperature precool",
                                    "demand precool"]:
                         ds_dict_fin[key][ind_n][ind_m] = ds_dict_prep[key][
                             max_min_median[ind_m]][ind_n][ind_m]
@@ -1676,22 +1668,11 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
         else:
             pass
 
-    # Set low pre-cooling input list values to zero when predicted temperature
-    # change during the DR period is >2; set high pre-cooling input list values
-    # to zero when predicted temperature change during the DR period is <=2
-    for ind_n in range(n_samples):
-        for ind_m in range(len(names)):
-            if ds_dict_fin["temperature"][ind_n][ind_m] <= 2:
-                ds_dict_fin["temperature precool (high)"][ind_n][ind_m] = 0
-            else:
-                ds_dict_fin["temperature precool (low)"][ind_n][ind_m] = 0
-
     # Stack all model inputs into a single array for use in the DCE function
     x_choice = np.stack([
-        ds_dict_fin["cost"], ds_dict_fin["temperature precool (low)"],
-        ds_dict_fin["temperature precool (high)"], ds_dict_fin["temperature"],
-        ds_dict_fin["lighting"], ds_dict_fin["lighting"] * dl_pct,
-        ds_dict_fin["plug loads"]])
+        ds_dict_fin["cost"], ds_dict_fin["temperature precool"],
+        ds_dict_fin["temperature"], ds_dict_fin["lighting"],
+        ds_dict_fin["lighting"] * dl_pct, ds_dict_fin["plug loads"]])
     # Multiply model inputs by DCE betas to yield choice logits
     choice_logits = np.transpose(
         np.sum([np.transpose(x_choice[i]) * betas_choice[i] for
