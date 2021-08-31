@@ -340,9 +340,12 @@ class UsefulFilesVars(object):
                  'demand_precool'), (['<f8'] * 5)]
 
         # Set DCE model column names and data types
+        # dce_names_dtypes = [(
+        #     'economy', 'pc_tmp', 'tmp', 'lgt', 'daylt', 'choice', 'plug'),
+        #     (['<f8'] * 7)]
         dce_names_dtypes = [(
-            'economy', 'pc_tmp', 'tmp', 'lgt', 'daylt', 'choice', 'plug'),
-            (['<f8'] * 7)]
+            'economy', 'pc_tmp_high', 'pc_tmp_low', 'tmp', 'lgt', 'daylt',
+            'choice', 'plug'), (['<f8'] * 8)]
 
         # For each model type, store information on input/output data file
         # names, input/output data file formats, model variables, and
@@ -425,7 +428,14 @@ class ModelDataLoad(object):
         pc_dmd (numpy ndarray): Input data for pre-cooling demand model init.
         coefs (tuple): Path to CSV file with regression coefficients for
             use in model re-estimation.
-        hr (numpy ndarray): Hours covered by model prediction input data
+        strategy (numpy ndarray): Strategies covered by prediction input data
+        strategy_orig (numpy ndarray): Strategies covered by prediction input
+            data before screening for invalid input conditions.
+        hr (numpy ndarray): Hours covered by DR model prediction input data.
+        hr_orig (numpy ndarray): Covered hours before screening DR prediction
+            data for invalid input conditions.
+        hr_bl (numpy.ndarray): Hours covered by the baseline model prediction
+            data.
         tmp_delt (numpy ndarray): Data used to determine whether
             a measure changes the thermostat set point in a current hour.
         tmp_delt_prev (numpy ndarray): Data used to determine whether
@@ -434,6 +444,8 @@ class ModelDataLoad(object):
             a measure changes the lighting setting in a current hour.
         plug_delt (numpy ndarray): Plug load adjustment fractions by DR
             strategy for use in model prediction.
+        pc_mag (numpy.array): Precooling magnitude assoc. with each strategy.
+
         oaf_delt (numpy ndarray): Outdoor air adjustment fractions by DR
             strategy for use in model prediction.
         price_delt (numpy ndarray): $/kWh incentive by DR strategy for use
@@ -546,44 +558,42 @@ class ModelDataLoad(object):
                 dtype=handyfilesvars.mod_dict[
                     "demand_therm"]["io_data_names"][1])
 
-            # Pull out key variables as class attributes
-            self.tmp_delt = common_data['tsp_delt']
-            self.tmp_delt_prev = common_data['tsp_delt_lag']
-            self.lgt_delt = common_data['lt_pwr_delt_pct']
-            self.plug_delt = common_data['mels_delt_pct']
-            self.pc_mag = common_data['pc_tmp_inc']
-
             # Restrict prediction input file to appropriate prediction or
             # model estimation update data (if applicable)
             if mod_est is False:
-                self.hr_bl = dmd_bl['Hr']
-                self.hr = common_data['Hr']
-                self.strategy = common_data['Name']
-                self.price_delt = common_data['delt_price_kwh']
                 # Set inputs to baseline demand model
                 # from prediction/estimation input files
                 self.dmd_bl = dmd_bl
-                # Set inputs to demand, temperature, co2, lighting, and
-                # pre-cooling models from prediction/estimation input files
+                self.hr_bl = dmd_bl['Hr']
+                # Screen precooling or temperature-related strategies
+                # (indicated by a set point change or lagged set point change
+                # that is non-zero) for OAT <= 70
+                screened_strats = np.unique(
+                    common_data[np.where((
+                        (common_data['tsp_delt'] != 0) |
+                        (common_data['tsp_delt_lag'] != 0)) &
+                        (common_data['t_out'] <= 70))]['Name'])
+                # Post-screening data to use for predictions
+                common_data_screened = common_data[
+                    np.isin(common_data['Name'], screened_strats, invert=True)]
+                # Pull out key variables from screened data as class attributes
+                self.tmp_delt = common_data_screened['tsp_delt']
+                self.tmp_delt_prev = common_data_screened['tsp_delt_lag']
+                self.lgt_delt = common_data_screened['lt_pwr_delt_pct']
+                self.plug_delt = common_data_screened['mels_delt_pct']
+                self.pc_mag = common_data_screened['pc_tmp_inc']
+                self.hr = common_data_screened['Hr']
+                self.hr_orig = common_data['Hr']
+                self.strategy = common_data_screened['Name']
+                self.strategy_orig = common_data['Name']
+                self.price_delt = common_data_screened['delt_price_kwh']
+                # Set inputs to demand, temperature, lighting, and
+                # pre-cooling models from screened prediction input files
                 self.dmd_therm, self.dmd_ntherm, self.tmp, \
-                    self.pc_dmd = (common_data for n in range(4))
+                    self.pc_dmd = (common_data_screened for n in range(4))
             elif mod_est is True:
-                # if update_days is not None:
-                #     self.event_days_bl = np.unique(dmd_bl['day_num'])
-                #     self.event_days = np.unique(common_data['day_num'])
-                # else:
-                #     self.event_days_bl, self.event_days = (list(
-                #         range(update_days[0], update_days[1] + 1)) for
-                #         n in range(2))
-                #     dmd_bl = dmd_bl[
-                #         np.in1d(dmd_bl['day_num'], self.event_days_bl)]
-                #     common_data = common_data[
-                #         np.in1d(common_data['day_num'], self.event_days)]
                 # Set inputs to demand, temperature, co2, lighting, and
                 # pre-cooling models from prediction/estimation input files
-                self.hr_bl = None
-                self.hr = None
-                self.strategy = None
                 # Note: DR period data are flagged by rows where the set point
                 # temperature change is greater than or equal to zero
                 self.dmd_bl = dmd_bl
@@ -617,7 +627,11 @@ class ModelDataLoad(object):
                     skip_header=True, delimiter=',',
                     names=handyfilesvars.coef_names_dtypes[0],
                     dtype=handyfilesvars.coef_names_dtypes[1])
-
+                # Initialize attributes related to prediction mode to zero
+                self.tmp_delt, self.tmp_delt_prev, self.lgt_delt, \
+                    self.plug_delt, self.pc_mag, self.hr, \
+                    self.hr_orig, self.strategy, self.strategy_orig, \
+                    self.price_delt, self.hr_bl = (None for n in range(11))
             # When not initializing or assessing a model, choice model
             # attribute is irrelevant
             self.choice = None
@@ -918,8 +932,12 @@ class ModelIO(object):
                 x for x in range(len(data.choice))] for n in range(2))
             # Economic benefit
             economy = data.choice['economy']
-            # Pre-cooling temp. decrease
-            pc_tmp = data.choice['pc_tmp']
+            # # Pre-cooling temp. decrease
+            # pc_tmp = data.choice['pc_tmp']
+            # Pre-cooling temp. decrease (<=2 deg F event temp. increase)
+            pc_tmp_l = data.choice['pc_tmp_low']
+            # Pre-cooling temp. decrease (>2  deg F event temp. increase)
+            pc_tmp_h = data.choice['pc_tmp_high']
             # Temp. increase
             tmp = data.choice['tmp']
             # Lighting decrease
@@ -931,8 +949,10 @@ class ModelIO(object):
             # Plug load decrease
             plug = data.choice['plug']
             # Set model input (X) variables; note, NO INTERCEPT
+            # self.X_all = np.stack([
+            #     economy, pc_tmp, tmp, lgt, lgt_dl, plug], axis=1)
             self.X_all = np.stack([
-                economy, pc_tmp, tmp, lgt, lgt_dl, plug], axis=1)
+                economy, pc_tmp_l, pc_tmp_h, tmp, lgt, lgt_dl, plug], axis=1)
             # Set model output (Y) variable for estimation cases
             self.Y_all = data.choice['choice']
 
@@ -1091,7 +1111,7 @@ def main(base_dir):
                         shape=(iot.X.shape[1] - 1))
                     # Plug load prior set to roughly that of lighting current
                     # summer coefficient given zero daylighting
-                    params_2 = pm.Normal('plg', -2.5, 0.5, shape=1)
+                    params_2 = pm.Normal('plg', -3, 0.5, shape=1)
                     params = tt.tensor.concatenate([
                         params_1, params_2], axis=0)
                     # Likelihood of outcome estimator; apply sigmoid function
@@ -1388,6 +1408,7 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
     names_pc = dat.strategy[np.where(dat.hr == -1)]
     # Find names of candidate DR strategies (without baseline option)
     names_o = dat.strategy[np.where(dat.hr == 1)]
+    names_o_orig = dat.strategy_orig[np.where(dat.hr_orig == 1)]
     # Add baseline (do nothing) option to the set of names to write out if
     # desired by the user; attach a default tag to baseline if no other
     # strategy names are tagged as the default
@@ -1395,10 +1416,13 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
         default_flag = np.where(np.char.find(names_o, "(D)") != -1)
         if len(default_flag[0]) != 0:
             names = np.append(names_o, "Baseline - Do Nothing")
+            names_orig = np.append(names_o_orig, "Baseline - Do Nothing")
         else:
             names = np.append(names_o, "Baseline - Do Nothing (D)")
+            names_orig = np.append(names_o_orig, "Baseline - Do Nothing")
     else:
         names = names_o
+        names_orig = names_o_orig
     # Find indices for the pre-cooling measures within the broader measure set
     names_pc_inds = []
     for pcn in names_pc:
@@ -1412,10 +1436,14 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
         key: [] for key in handyfilesvars.mod_dict.keys()}
     # Initialize dict for storing demand/cost/service predictions for each
     # hour in the analysis (including precooling hours as applicable)
+    # ds_dict_prep = {
+    #     "demand": [], "demand precool": [], "cost": [], "cost precool": [],
+    #     "temperature": [], "temperature precool": [],
+    #     "lighting": [], "plug loads": []}
     ds_dict_prep = {
         "demand": [], "demand precool": [], "cost": [], "cost precool": [],
-        "temperature": [], "temperature precool": [],
-        "lighting": [], "plug loads": []}
+        "temperature": [], "temperature precool (low)": [],
+        "temperature precool (high)": [], "lighting": [], "plug loads": []}
     # Initialize a numpy array that stores the count of the number of
     # times each candidate DR strategy is selected across simulated hours
     counts = np.zeros(n_choices)
@@ -1498,7 +1526,9 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
             pp_dict["demand_precool"]['Demand Change (W/sf)'])
         # Predicted change in temperature (precooling hour); NOTE invert the
         # sign of the predictions to match what is expected by the DCE equation
-        ds_dict_prep["temperature precool"].append(pc_mags)
+        # ds_dict_prep["temperature precool"].append(pc_mags)
+        ds_dict_prep["temperature precool (high)"].append(pc_mags)
+        ds_dict_prep["temperature precool (low)"].append(pc_mags)
         # Predicted change in economic benefit (precooling hour)
         ds_dict_prep["cost precool"].append(cost_delt)
 
@@ -1570,10 +1600,16 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
     # the discrete choice model), as well as final choice probabilities; all
     # values are initialized to zero; note that baseline choice option will
     # not be updated (is left with all zero values for utility calc later)
+    # ds_dict_fin = {
+    #     key: np.zeros((n_samples, n_choices)) for key in [
+    #         "demand", "demand precool", "cost", "cost precool", "temperature",
+    #         "temperature precool", "lighting", "plug loads"]
+    # }
     ds_dict_fin = {
         key: np.zeros((n_samples, n_choices)) for key in [
             "demand", "demand precool", "cost", "cost precool", "temperature",
-            "temperature precool", "lighting", "plug loads"]
+            "temperature precool (high)", "temperature precool (low)",
+            "lighting", "plug loads"]
     }
     # Loop through all variable keys in the final predictions dict and update
     # the final predictions data
@@ -1626,9 +1662,15 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
         # in these variables from the prep dict, across all simulated hours;
         # handle cases where there are no pre-cooling measures or service
         # changes to update
+        # elif key != "choice probabilities" and (key not in [
+        #     "temperature precool", "demand precool", "cost precool"] or (
+        #         key in ["temperature precool", "demand precool"] and len(
+        #             ds_dict_prep[key]) != 0)):
         elif key != "choice probabilities" and (key not in [
-            "temperature precool", "demand precool", "cost precool"] or (
-                key in ["temperature precool", "demand precool"] and len(
+            "temperature precool (high)", "temperature precool (low)",
+            "demand precool", "cost precool"] or (
+                key in ["temperature precool (high)",
+                        "temperature precool (low)", "demand precool"] and len(
                     ds_dict_prep[key]) != 0)):
             # Initialize list for storing the median predicted change in
             # variable for the given hour represented by the the prep dict
@@ -1656,7 +1698,10 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
                     # variable itself; precooling  temperature and demand
                     # variables will reflect only the subset of the total set
                     # of measures that feature pre-cooling
-                    if key not in ["temperature precool",
+                    # if key not in ["temperature precool",
+                    #                "demand precool"]:
+                    if key not in ["temperature precool (high)",
+                                   "temperature precool (low)",
                                    "demand precool"]:
                         ds_dict_fin[key][ind_n][ind_m] = ds_dict_prep[key][
                             max_min_median[ind_m]][ind_n][ind_m]
@@ -1668,9 +1713,24 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
         else:
             pass
 
+    # Set low pre-cooling input list values to zero when predicted temperature
+    # change during the DR period is >2; set high pre-cooling input list values
+    # to zero when predicted temperature change during the DR period is <=2
+    for ind_n in range(n_samples):
+        for ind_m in range(len(names)):
+            if ds_dict_fin["temperature"][ind_n][ind_m] <= 2:
+                ds_dict_fin["temperature precool (high)"][ind_n][ind_m] = 0
+            else:
+                ds_dict_fin["temperature precool (low)"][ind_n][ind_m] = 0
+
     # Stack all model inputs into a single array for use in the DCE function
+    # x_choice = np.stack([
+    #     ds_dict_fin["cost"], ds_dict_fin["temperature precool"],
+    #     ds_dict_fin["temperature"], ds_dict_fin["lighting"],
+    #     ds_dict_fin["lighting"] * dl_pct, ds_dict_fin["plug loads"]])
     x_choice = np.stack([
-        ds_dict_fin["cost"], ds_dict_fin["temperature precool"],
+        ds_dict_fin["cost"], ds_dict_fin["temperature precool (low)"],
+        ds_dict_fin["temperature precool (high)"],
         ds_dict_fin["temperature"], ds_dict_fin["lighting"],
         ds_dict_fin["lighting"] * dl_pct, ds_dict_fin["plug loads"]])
     # Multiply model inputs by DCE betas to yield choice logits
@@ -1719,6 +1779,12 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
             names[x]: list(np.transpose(ds_dict_fin[key])[x]) for
             x in range(len(names))} for key in ds_dict_fin.keys()}
         }
+    # Add back in screened out strategies from the original list with a
+    # probability of zero for the current event
+    if len(names_orig) != len(names):
+        removed_names = list(set(names_orig) - set(names))
+        for rn in removed_names:
+            predict_out["predictions"][rn] = 0
 
     return predict_out
 
