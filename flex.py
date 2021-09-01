@@ -1760,7 +1760,15 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
     counts[unique] += counts_hr
     # Add to total number of simulated hours
     counts_denom += np.sum(counts_hr)
-
+    # Develop a final list of simulated counts by strategy
+    counts_orig = np.zeros(len(names_orig))
+    # Counts are zeros for strategies in original list that were screened
+    for ind, n in enumerate(names_orig):
+        # Find index of post-screening measure data to add
+        ind_restr = np.where(names == n)[0]
+        # If data are found update counts for pre-screen list of measures
+        if len(ind_restr) != 0:
+            counts_orig[ind] = counts[ind_restr[0]]
     # Store summary of the percentage of simulated hours that each
     # DR strategy was predicted to be selected in a dict; also store the final
     # set of input data for the DCE model in this dict, and the predicted
@@ -1774,17 +1782,11 @@ def gen_recs(handyfilesvars, sf, dmd_thres, bldg_type_vint, dl_pct):
             "predicted choice probability outputs themselves"),
         "predictions": {
             x: round(((y / counts_denom) * 100), 5) for
-            x, y in zip(names, counts)},
+            x, y in zip(names_orig, counts_orig)},
         "input output data": {key: {
             names[x]: list(np.transpose(ds_dict_fin[key])[x]) for
             x in range(len(names))} for key in ds_dict_fin.keys()}
         }
-    # Add back in screened out strategies from the original list with a
-    # probability of zero for the current event
-    if len(names_orig) != len(names):
-        removed_names = list(set(names_orig) - set(names))
-        for rn in removed_names:
-            predict_out["predictions"][rn] = 0
 
     return predict_out
 
