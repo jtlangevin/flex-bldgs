@@ -8,7 +8,9 @@
 Software Requirements
 =====================
 
-FlexAssist runs on Python and several of its supporting packages, as outlined below.
+The latest version of the full FlexAssist code base can be `downloaded on GitHub`_. FlexAssist runs on Python and several of its supporting packages, as outlined below.
+
+.. _downloaded on GitHub: https://github.com/jtlangevin/flex-bldgs/releases
 
 **Prerequisites***
 
