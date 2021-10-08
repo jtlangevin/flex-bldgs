@@ -2,6 +2,9 @@
 .. |--| unicode:: U+2013   .. en dash
 .. |---| unicode:: U+2014  .. em dash, trimming surrounding whitespace
    :trim:
+.. |br| raw:: html
+
+   <br />
 
 .. _execute:
 
@@ -27,7 +30,7 @@ Given a set of candidate DR strategies and day-ahead DR event conditions as an i
 Required input files
 ********************
 
-The input file for this execution mode is found in ./data/test_predict.csv. :numref:`predict-input` outlines the columns that must be present in this file.
+The input file for this execution mode is found in ``./data/test_predict.csv.``. :numref:`predict-input` outlines the columns that must be present in this file.
 
 .. _predict-input:
 .. table:: Description of the input file for generating the recommendations.
@@ -65,7 +68,7 @@ The input file for this execution mode is found in ./data/test_predict.csv. :num
    +-------------------------+-------------------------------------------------+
    | Delt_OAVent_Pct         | Reduction in outdoor air fraction               |
    +-------------------------+-------------------------------------------------+
-   | Delt_Pl_Pct             | Reduction in plug load power (%)                |
+   | Delt_PL_Pct             | Reduction in plug load power (%)                |
    +-------------------------+-------------------------------------------------+
    | Delt_CoolSP_Lag         | Change in temperature set point since previous  |
    |                         | hour (ºF)                                       |
@@ -76,7 +79,7 @@ The input file for this execution mode is found in ./data/test_predict.csv. :num
    | Delt_OAVent_Pct-Lag     | Change in outdoor air fraction since previous   |
    |                         | hour (%)                                        |
    +-------------------------+-------------------------------------------------+
-   | Delt_Pl_Pct_Lag         | Change in plugload power since previous hour (%)|
+   | Delt_PL_Pct_Lag         | Change in plugload power since previous hour (%)|
    +-------------------------+-------------------------------------------------+
    | Pcool_Mag               | Magnitude of pre-cooling before event started   |
    |                         | (ºF temperature decrease)                       |
@@ -85,7 +88,11 @@ The input file for this execution mode is found in ./data/test_predict.csv. :num
    +-------------------------+-------------------------------------------------+
 
 
-An example of this input file is `available`_ that reflects the candidate DR strategies shown in Table :numref:`DR-strategy`. 
+An example of this input file is `available`_ that reflects the candidate DR strategies shown in Table :numref:`DR-strategy`.
+
+.. note::
+
+   Plug load reduction strategies are currently only supported when running simulations for office building types; when running simulations for retail buildings, all settings in ``./data/test_predict.csv.`` related to plug loads should be set to zero. 
 
 .. _DR-strategy:
 .. table:: Example set of DR strategy characteristics.
@@ -95,56 +102,56 @@ An example of this input file is `available`_ that reflects the candidate DR str
    +=========================+==============================+==================+
    | GTA-Low                 | Global temperature adjustment| +2ºF             |
    +-------------------------+------------------------------+------------------+
-   | GTA-Moderate            | Global temperature adjustment| +4ºF             |
+   | GTA-Moderate            | Global temperature adjustment| +3ºF             |
    +-------------------------+------------------------------+------------------+
-   | GTA-High                | Global temperature adjustment| +6ºF             |
+   | GTA-High                | Global temperature adjustment| +5ºF             |
    +-------------------------+------------------------------+------------------+
-   | Precool-Low             | Global temperature adjustment| +2ºF             |
+   | Precool-Low             | Global temp. adjustment |br| | +2ºF             |
    |                         | Precooling temperature change| -2ºF             |
    +-------------------------+------------------------------+------------------+
-   | Precool-Moderate        | Global temperature adjustment| +4ºF             |
-   |                         | Precooling temperature change| -3ºF             |
-   +-------------------------+------------------------------+------------------+
-   | Precool-High            | Global temperature adjustment| +6ºF             |
+   | Precool-Moderate        | Global temp. adjustment |br| | +3ºF             |
    |                         | Precooling temperature change| -5ºF             |
    +-------------------------+------------------------------+------------------+
-   | Dimming-Low             | Lighting dimming             | -10%             |
+   | Precool-High            | Global temp. adjustment |br| | +5ºF             |
+   |                         | Precooling temperature change| -5ºF             |
    +-------------------------+------------------------------+------------------+
-   | Dimming-Moderate        | Lighting dimming             | -20%             |
+   | Dimming-Low             | Lighting dimming             | -20%             |
    +-------------------------+------------------------------+------------------+
-   | Dimming-High            | Lighting dimming             | -30%             |
+   | Dimming-Moderate        | Lighting dimming             | -40%             |
+   +-------------------------+------------------------------+------------------+
+   | Dimming-High            | Lighting dimming             | -60%             |
    +-------------------------+------------------------------+------------------+
    | Plug Load-Low           | Plug load reduction          | -10%             |
    +-------------------------+------------------------------+------------------+
-   | Plug Load-Moderate      | Plug load reduction          | -20%             |
+   | Plug Load-Moderate      | Plug load reduction          | -30%             |
    +-------------------------+------------------------------+------------------+
-   | Plug Load-High          | Plug load reduction          | -30%             |
+   | Plug Load-High          | Plug load reduction          | -50%             |
    +-------------------------+------------------------------+------------------+
-   | Package-Low             | Global temperature adjustment| +2ºF             |
-   |                         | Lighting dimming             | -10%             |
+   | Package-Low             | Global temp. adjustment |br| | +2ºF             |
+   |                         | Lighting dimming |br|        | -10%             |
    |                         | Plug load reduction          | -10%             |
    +-------------------------+------------------------------+------------------+
-   | Package-Moderate        | Global temperature adjustment| +4ºF             |
-   |                         | Lighting dimming             | -30%             |
+   | Package-Moderate        | Global temp. adjustment |br| | +4ºF             |
+   |                         | Lighting dimming |br|        | -30%             |
    |                         | Plug load reduction          | -30%             |
    +-------------------------+------------------------------+------------------+
-   | Package-High            | Global temperature adjustment| +6ºF             |
-   |                         | Lighting dimming             | -30%             |
+   | Package-High            | Global temp. adjustment |br| | +6ºF             |
+   |                         | Lighting dimming |br|        | -30%             |
    |                         | Plug load reduction          | -30%             |
    +-------------------------+------------------------------+------------------+
-   | Package-Low-Precool     | Global temperature adjustment| +2ºF             |
-   |                         | Lighting dimming             | -10%             |
-   |                         | Plug load reduction          | -10%             |
+   | Package-Low-Precool     | Global temp. adjustment |br| | +2ºF             |
+   |                         | Lighting dimming |br|        | -20%             |
+   |                         | Plug load reduction |br|     | -10%             |
    |                         | Precooling temperature change| -2ºF             |
    +-------------------------+------------------------------+------------------+
-   | Package-Moderate-Precool| Global temperature adjustment| +4ºF             |
-   |                         | Lighting dimming             | -20%             |
-   |                         | Plug load reduction          | -20%             |
-   |                         | Precooling temperature change| -3ºF             |
+   | Package-Moderate-Precool| Global temp. adjustment |br| | +3ºF             |
+   |                         | Lighting dimming |br|        | -40%             |
+   |                         | Plug load reduction |br|     | -30%             |
+   |                         | Precooling temperature change| -5ºF             |
    +-------------------------+------------------------------+------------------+
-   | Package-High-Precool    | Global temperature adjustment| +6ºF             |
-   |                         | Lighting dimming             | -30%             |
-   |                         | Plug load reduction          | -30%             |
+   | Package-High-Precool    | Global temp. adjustment |br| | +5ºF             |
+   |                         | Lighting dimming |br|        | -60%             |
+   |                         | Plug load reduction |br|     | -50%             |
    |                         | Precooling temperature change| -5ºF             |
    +-------------------------+------------------------------+------------------+
 
@@ -160,14 +167,16 @@ DR strategy recommendations and associated predictions are generated with the fo
 **Windows** ::
 
    cd Documents\projects\flex-bldgs
-   py -3 flex.py --bldg_type <insert building type/vintage name> --bldg_sf <insert square footage>
+   py -3 flex.py --bldg_type <insert building type/vintage name> --bldg_sf <insert square footage> <additional options>
 
 **Mac** ::
 
    cd Documents/projects/flex-bldgs
-   python3 flex.py --bldg_type <insert buildling type/vintage name> --bldg_sf <insert square footage>
+   python3 flex.py --bldg_type <insert buildling type/vintage name> --bldg_sf <insert square footage> <additional options>
 
-Where building name options include `mediumofficenew` (~50K square foot medium office post-2004), `mediumofficeold` (~50K square foot medium office pre-2004, `retailnew` (~25K standalone retail building post-2004), and `retailold` (~25K standalone retail building pre-2004). Building square footage should be entered as-is (e.g., 50,000 for a 50K square foot building)
+Where ``--bldg_type`` options include ``mediumofficenew`` (~50K square foot medium office post-2004), ``mediumofficeold`` (~50K square foot medium office pre-2004, ``stdaloneretailnew`` (~25K standalone retail building post-2004), ``stdaloneretailold`` (~25K standalone retail building pre-2004), ``largeofficenew`` (~500K square foot large office pre-2004), ``largeofficeold`` (~500K square foot large office post-2004), ``largeofficenew_elec`` (all-electric version of ``largeofficenew`` using water-source heat pump and dedicated outdoor air system (DOAS)), ``largeofficeold_elec`` (all-electric version of ``largeofficeold``), and ``bigboxretail`` (~100K square foot big box retail building, 2004 vintage). Values for ``--bldg_sf`` should be entered as-is (e.g., 50,000 for a 50K square foot building)
+
+Additional run options (represented in the command above by ``<additional options>``) include ``--null_strategy``, which will include the option of taking no actions in the candidate strategies; ``--dmd_thres <insert value>``, which will impose a threshold on maximum during-event hourly demand reduction (in W) across strategies and remove strategies that do not meet the threshold from consideration on an event-by-event basis; and ``--daylt_pct <insert value>`` which will adjust the standard 30% daylit floorspace assumed in making predictions to the user-specified value (in %).
 
 The model will load the input data and begin predicting the changes in demand and indoor services during each of the event hours reflected in the input file, drawing upon previously initialized models of building demand and services (see :ref:`Selecting from set of DR response strategies <mod-init>`). 
 
@@ -175,7 +184,7 @@ The model will load the input data and begin predicting the changes in demand an
 Interpretation of outputs
 **************************
 
-Outputs from execution of this mode are stored in the file ./data/recommendations.json. The file has the following structure: ::
+Outputs from execution of this mode are stored in the file ``./data/recommendations.json``. The file has the following structure: ::
 
     {
      "notes": <notes about the contents of the file>,
@@ -200,8 +209,11 @@ Outputs from execution of this mode are stored in the file ./data/recommendation
              "DR strategy name 1": [<All sampled maximum hourly temperature increase values (ºF) for DR strategy name 1>],
              "DR strategy name N": [<All sampled maximum hourly temperature increase values (ºF) for DR strategy name N>]},
           "lighting": {
-             "DR strategy name 1": [<All sampled maximum hourly total illuminance reduction values (fraction) for DR strategy name 1>],
-             "DR strategy name N": [<All sampled maximum hourly total illuminance reduction values (fraction) for DR strategy name N>]}
+             "DR strategy name 1": [<Input lighting reduction fraction for DR strategy name 1>],
+             "DR strategy name N": [<Input lighting reduction fraction for DR strategy name N>]},
+          "plug loads": {
+             "DR strategy name 1": [<Input plug load reduction fraction for DR strategy name 1>],
+             "DR strategy name N": [<Input plug load reduction fraction for DR strategy name N>]}
       }
     }
 
@@ -219,7 +231,7 @@ One of the functions of FlexAssist is to generate the baseline demand value give
 Required input files
 ********************
 
-The input file for this execution mode is found in ./data/test_predict_bl.csv. :numref:`baseline-input` outlines the columns that must be present in this file.
+The input file for this execution mode is found in ``./data/test_predict_bl.csv``. :numref:`baseline-input` outlines the columns that must be present in this file.
 
 .. _baseline-input:
 .. table:: Description of the input file for generating the baseline demand prediction.
@@ -273,7 +285,7 @@ The model will automatically load in the input data and start calculating the ho
 Interpretation of outputs
 **************************
 
-Predicted hourly baseline demand values are reported in ./database_predict_summary.csv. For each predicted hour, there will be 1) mean value (W/sf), and 2) standard deviation together indicating the predicted results. By default, the sample number for generating these results is set to 1000.
+Predicted hourly baseline demand values are reported in ``./data/base_predict_summary.csv``. For each predicted hour, there will be 1) mean value (W/sf), and 2) standard deviation together indicating the predicted results. By default, the sample number for generating these results is set to 1000.
 
 
 
@@ -285,10 +297,10 @@ Generating new models
 Users can use this mode to initialize/re-initialize all the models of building demand/services and operator utility that underly FlexAssist's predictions, given input CSV data that follows a certain data structure. The model list includes the following 6 regression models:
 
 * Baseline demand value
-* Demand changes during the DR period
+* Thermally-driven demand changes during the DR period (for strategies involving temperature adjustment)
+* Non thermally-driven demand changes during the DR period (for strategies not involving temperature adjustment)
 * Demand changes during the pre-cooling period
-* Indoor temperature changes during the DR period
-* Indoor illuminance changes during the DR period
+* Indoor temperature changes during the DR period (relevant only to strategies involving temperature adjustment)
 * Operator utility
 
 .. * Indoor CO2 concentration changes during the DR period
@@ -297,29 +309,25 @@ Users can use this mode to initialize/re-initialize all the models of building d
 Required input files
 ********************
 
-Input files for this execution mode are found in the ./data directory. Current CSV `files`_ underlying the models of building demand and services were generated from a batch of simulations in EnergyPlus, where four scenarios of building types and vintages were considered. Another `file`_ with training data for the operator choice model was developed from discrete choice experiments with building operators. If users want to re-initialize the models using their own data, the format of their CSV files must be consistent with these current files. Table :numref:`init-input` shows example CSV file names underlying demand and service models sfor the medium office new vintage (post-2004); these example CSVs may serve as useful references for formatting and content. 
+Input files for this execution mode are found in the ``./data`` directory. Current CSV `files`_ underlying the models of building demand and services were generated from a batch of simulations in EnergyPlus, where four scenarios of building types and vintages were considered. Another `file`_ with training data for the operator choice model was developed from discrete choice experiments with building operators. If users want to re-initialize the models using their own data, the format of their CSV files must be consistent with these current files. Table :numref:`init-input` shows example CSV file names underlying demand and service models sfor the medium office new vintage (post-2004); these example CSVs may serve as useful references for formatting and content. 
 
 .. _init-input:
 .. table:: Input files for generating new regression models.
 
-   +-----------------------+-------------------------------------------------+ 
-   | Input file            | Regression model                                | 
-   +=======================+=================================================+
-   | MO_B.csv              | Baseline demand prediction                      |
-   +-----------------------+-------------------------------------------------+
-   | MO_DR_new.csv         | Demand changes during the DR period             | 
-   |                       +-------------------------------------------------+
-   |                       | Indoor temperature changes during DR            |
-   +-----------------------+-------------------------------------------------+
-   | MO_Precooling_new.csv | Demand changes during the pre-cooling period    |
-   |                       +-------------------------------------------------+
-   |                       | Indoor temeprature changes during pre-cooling   |
-   +-----------------------+-------------------------------------------------+
-   | CO2_MO.csv            | Indoor CO2 concentration changes during DR      |
-   +-----------------------+-------------------------------------------------+
-   | Illuminance.csv       | Indoor illuminance changes during DR            |
-   +-----------------------+-------------------------------------------------+
-   
+   +-----------------------------+------------------------------------------------------------+ 
+   | Input file                  | Regression model                                           | 
+   +=============================+============================================================+
+   | MO_B.csv                    | Baseline demand prediction                                 |
+   +-----------------------------+------------------------------------------------------------+
+   | MO_Thermal_Demand_new.csv   | Thermally-driven demand changes during the DR period       | 
+   +-----------------------------+------------------------------------------------------------+
+   | MO_Nonthermal_Demand_new.csv| Non thermally-driven demand changes during the DR period   | 
+   +-----------------------------+------------------------------------------------------------+
+   | MO_PC_Demand_new.csv        | Demand changes during the pre-cooling period               |
+   +-----------------------------+------------------------------------------------------------+
+   | MO_Temperature_new.csv      | Indoor temperature changes during DR                       |
+   +-----------------------------+------------------------------------------------------------+
+
 .. _files: https://github.com/jtlangevin/flex-bldgs/tree/master/data
 .. _file: https://github.com/jtlangevin/flex-bldgs/blob/master/data/dce_dat.csv
 
@@ -331,38 +339,38 @@ New model initialization is executed using the ``--mod_init`` option as below:
 **Windows** ::
 
    cd Documents\projects\flex-bldgs
-   py -3 flex.py --mod_init --bldg_type <insert bldg name> --bldg_sf <insert sf>
+   py -3 flex.py --mod_init --bldg_type <insert bldg name>
 
 **Mac** ::
 
    cd Documents/projects/flex-bldgs
-   python3 flex.py --mod_init --bldg_type <insert bldg name> --bldg_sf <insert sf>
+   python3 flex.py --mod_init --bldg_type <insert bldg name>
 
 The model will start loading input data and initializing the variables for each regression model.
 
 Interpretation of outputs
 **************************
 
-Model coefficient samples from the Bayesian inference framework are saved as pickled files (``.pkl`` ) to the ./model_stored directory. For example, for the medium office building type and new vintage (post-2004), each file represents specific model(s) as shown in :numref:`init-output`.
+Model coefficient samples from the Bayesian inference framework are saved as pickled files (``.pkl`` ) to the ``./model_stored`` directory. For example, for the medium office building type and new vintage (post-2004), each file represents specific model(s) as shown in :numref:`init-output`.
 
 .. _init-output:
-.. table:: Output files representing those generated regression models.
+.. table:: Coefficient data for generated regression models.
 
-   +-----------------------+-------------------------------------------------+ 
-   | Output file           | Regression model                                | 
-   +=======================+=================================================+
-   | dmd_mo_b.pkl          | Baseline demand prediction                      |
-   +-----------------------+-------------------------------------------------+
-   | dmd_mo_n.pkl          | Demand changes during the DR event period       | 
-   +-----------------------+-------------------------------------------------+
-   | pc_dmd_mo_n.pkl       | Demand changes during the pre-cooling period    |
-   +-----------------------+-------------------------------------------------+
-   | tmp_mo_n.pkl          | Indoor temperature changes during DR            |
-   +-----------------------+-------------------------------------------------+
-   | lt.pkl                | Indoor illuminance changes during DR            |
-   +-----------------------+-------------------------------------------------+
-   | dce.pkl               | Operator utility                                |
-   +-----------------------+-------------------------------------------------+
+   +-----------------------+------------------------------------------------------------+ 
+   | Output file           | Regression model                                           | 
+   +=======================+============================================================+
+   | dmd_mo_b.pkl          | Baseline demand prediction                                 |
+   +-----------------------+------------------------------------------------------------+
+   | dmd_therm_mo_n.pkl    | Thermally-driven demand changes during the DR event period |
+   +-----------------------+------------------------------------------------------------+
+   | dmd_ntherm_mo_n.pkl   | Non thermally-driven demand changes during the DR period   |
+   +-----------------------+------------------------------------------------------------+
+   | pc_dmd_mo_n.pkl       | Demand changes during the pre-cooling period               |
+   +-----------------------+------------------------------------------------------------+
+   | tmp_mo_n.pkl          | Indoor temperature changes during DR                       |
+   +-----------------------+------------------------------------------------------------+
+   | dce.pkl               | Operator utility                                           |
+   +-----------------------+------------------------------------------------------------+
 
 
 
@@ -384,19 +392,19 @@ Model coefficient samples from the Bayesian inference framework are saved as pic
    | lt.pkl                | Indoor illuminance changes during DR            |
    +-----------------------+-------------------------------------------------+
 
-..These models are used in other execution modes, such as :ref:`Selecting from set of DR response strategies <mod-pred>` and :ref:`Updating existing models <mod-est>`. 
+These stored moddel coefficient data are then drawn from in the other execution modes. 
 
 .. _mod-est:
 
 Updating existing models
 -------------------------
 
-FlexAssist enables updating of previously initialized models of change in building demand and services based on new data observations. Existing models are stored in ``.pkl`` files in the ./model_stored folder, as outlined in :numref:`init-output`. 
+FlexAssist enables updating of previously initialized models of change in building demand and services based on new data observations. Existing models are stored in ``.pkl`` files in the ``./model_stored`` folder, as outlined in :numref:`init-output`. 
 
 Required input files
 ********************
 
-The input file for this execution mode is found in ./data/test_update.csv for updating the models of demand/services under DR strategies, and in ./data/test_update_bl.csv for updating the models of baseline demand. :numref:`update-input` outlines the columns that must be present in this file, and an example is found `here`_.
+The input file for this execution mode is found in ``./data/test_update.csv`` for updating the models of demand/services under DR strategies, and in ``./data/test_update_bl.csv`` for updating the models of baseline demand. :numref:`update-input` outlines the columns that must be present in the formert file; example files are found `here for models of demand/services`_ and `here for models of baseline demand`_.
 
 .. _update-input:
 .. table:: Description of the input file for estimating the existing models.
@@ -404,19 +412,19 @@ The input file for this execution mode is found in ./data/test_update.csv for up
    +-------------------------+-------------------------------------------------+
    | Column name             | Description                                     |
    +=========================+=================================================+
-   | ID                      | DR strategy ID, not used, set to 999 for now    |
-   +-------------------------+-------------------------------------------------+
    | Vintage                 | Four vintages are considered within the scope:  |
    |                         | 1980, 1980-2004, 2004, 2010                     |
    +-------------------------+-------------------------------------------------+
-   | Day.type                | Weekdays as 1, weekends as 0                    |
-   +-------------------------+-------------------------------------------------+
-   | Day.number              | Number of the DR event, starting from 1         |
+   | Climate.zone            | Climate zone where the building is located,     |
+   |                         | followed by IECC climate zone map               |
    +-------------------------+-------------------------------------------------+
    | Hour.number             | Actual time based on 24-hour military time      |
    +-------------------------+-------------------------------------------------+
-   | Climate.zone            | Climate zone where the building is located,     |
-   |                         | followed by IECC climate zone map               |
+   | Outdoor.Temp.F          | Outdoor air temperature (ºF)                    |
+   +-------------------------+-------------------------------------------------+
+   | Outdoor.Humid.          | Outdoor relative humidity (%)                   |
+   +-------------------------+-------------------------------------------------+
+   | Occ.Fraction.           | Occupancy schedule fraction (<=1)               |
    +-------------------------+-------------------------------------------------+
    | Demand.Power.Diff.sf.   | Whole building reduction in electricity demand  |
    |                         | from baseline (W/sf)                            |
@@ -425,50 +433,33 @@ The input file for this execution mode is found in ./data/test_update.csv for up
    +-------------------------+-------------------------------------------------+
    | Indoor.Humid.Diff.F.    | Indoor RH difference from baseline (ºF)         |
    +-------------------------+-------------------------------------------------+
-   | Outdoor.Temp.F          | Outdoor air temperature (ºF)                    |
-   +-------------------------+-------------------------------------------------+
-   | Outdoor.Humid.          | Outdoor relative humidity (%)                   |
-   +-------------------------+-------------------------------------------------+
-   | Outdoor.Sky.Clearness.  | Outdoor sky clearness (unitless)                |
-   +-------------------------+-------------------------------------------------+
-   | Occ.Fraction.           | Occupancy schedule fraction (<=1)               |
-   +-------------------------+-------------------------------------------------+
-   | Cooling.Setpoint.Diff.  | Change in temperature set point (ºF)            |
-   +-------------------------+-------------------------------------------------+
    | Lighting.Power.Diff.pct.| Reduction in lighting power (%)                 |
-   +-------------------------+-------------------------------------------------+
-   | Ventilation.Diff.pct.   | Reduction in outdoor air fraction               |
    +-------------------------+-------------------------------------------------+
    | MELs.Diff.pct.          | Reduction in plug load power (%)                |
    +-------------------------+-------------------------------------------------+
-   | Since.DR.Started        | Hours into the DR window                        |
-   +-------------------------+-------------------------------------------------+
-   | Since.DR.Ended          | Hours since DR window ended                     |
-   +-------------------------+-------------------------------------------------+
-   | Since.Pre.cooling.Ended.| Hours since pre-cooling ended                   |
-   +-------------------------+-------------------------------------------------+
-   | Since.Pre.cooling.      | Hours since pre-cooling started                 |
-   | Started.                |                                                 |
+   | Cooling.Setpoint.Diff.  | Change in temperature set point (ºF)            |
    +-------------------------+-------------------------------------------------+
    | Cooling.Setpoint.Diff.  | Change in temperature set point since previous  |
    | One.Step.               | hour (ºF)                                       |
    +-------------------------+-------------------------------------------------+
-   | Lighting.Power.Diff.pct.| Change in lighting power since previous hour (%)|
-   | One.Step.               |                                                 |
+   | Since.DR.Started        | Hours into the DR window                        |
    +-------------------------+-------------------------------------------------+
-   | MELs.Diff.pct.One.Step. | Change in plugload power since previous hour (%)|
-   +-------------------------+-------------------------------------------------+
-   | Ventilation.Diff.pct.   | Change in outdoor air fraction since previous   |
-   | One.Step.               | hour (%)                                        |
+   | Since.DR.Ended          | Hours since DR window ended                     |
    +-------------------------+-------------------------------------------------+
    | Pre.cooling.Temp.       | Magnitude of pre-cooling before event started   |
    | Increase.               | (ºF temperature decrease)                       |
    +-------------------------+-------------------------------------------------+
    | Pre.cooling.Duration    | Duration of precooling before DR event started  |
    +-------------------------+-------------------------------------------------+
+   | Since.Pre.cooling.      | Hours since pre-cooling started                 |
+   | Started.                |                                                 |
+   +-------------------------+-------------------------------------------------+
+   | Since.Pre.cooling.Ended.| Hours since pre-cooling ended                   |
+   +-------------------------+-------------------------------------------------+
 
 
-.. _here: https://github.com/jtlangevin/flex-bldgs/blob/master/data/test_update.csv
+.. _here for models of demand/services: https://github.com/jtlangevin/flex-bldgs/blob/master/data/test_update.csv
+.. _here for models of baseline demand: https://github.com/jtlangevin/flex-bldgs/blob/master/data/test_update_bl.csv
 
 
 Running the model
@@ -479,18 +470,18 @@ Model updates are executed using the ``--mod_est`` option as below:
 **Windows** ::
 
    cd Documents\projects\flex-bldgs
-   py -3 flex.py --mod_est --bldg_type <insert bldg name> --bldg_sf <insert sf>
+   py -3 flex.py --mod_est --bldg_type <insert bldg name>
 
 **Mac** ::
 
    cd Documents/projects/flex-bldgs
-   python3 flex.py --mod_est --bldg_type <insert bldg name> --bldg_sf <insert sf>
+   python3 flex.py --mod_est --bldg_type <insert bldg name>
 
 The model will automatically load in the input data and start updating the previously initialized models.
 
 Interpretation of outputs
 **************************
 
-Updated model parameter coefficient distribution estimates are written to the ``.pkl`` files in the ./model_stored folder. The different ``.pkl`` model types are enumerated in :numref:`init-output`.
+Updated model parameter coefficient distribution estimates are written to the ``.pkl`` files in the ``./model_stored`` folder. The different ``.pkl`` model types are enumerated in :numref:`init-output`.
 
 
